@@ -1,0 +1,64 @@
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import fs from 'fs'
+import path from 'path'
+
+const execFileAsync = promisify(execFile)
+
+// جذر المشروع (server/src/services → ../../../)
+const PROJECT_ROOT = path.resolve(__dirname, '../../../')
+const SCRIPTS_DIR = path.join(PROJECT_ROOT, 'scripts')
+const BACKUP_DIR = path.join(PROJECT_ROOT, 'backups')
+
+export interface BackupResult {
+  filename: string
+  path: string
+  sizeBytes: number
+}
+
+// تشغيل سكربت النسخ الاحتياطي (حسب المنصة) ثم إرجاع أحدث ملف backup_*.sql.gz
+export async function createBackup(): Promise<BackupResult> {
+  const isWin = process.platform === 'win32'
+  const script = path.join(SCRIPTS_DIR, isWin ? 'backup.ps1' : 'backup.sh')
+
+  if (!fs.existsSync(script)) {
+    throw new Error(`سكربت النسخ الاحتياطي غير موجود: ${script}`)
+  }
+
+  try {
+    if (isWin) {
+      await execFileAsync(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script],
+        { cwd: PROJECT_ROOT, windowsHide: true, timeout: 5 * 60 * 1000 }
+      )
+    } else {
+      await execFileAsync('bash', [script], {
+        cwd: PROJECT_ROOT,
+        windowsHide: true,
+        timeout: 5 * 60 * 1000,
+      })
+    }
+  } catch (error: any) {
+    const detail = error?.message || String(error)
+    throw new Error(`فشل إنشاء النسخة الاحتياطية: ${detail}`)
+  }
+
+  const candidates = fs.existsSync(BACKUP_DIR)
+    ? fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.sql.gz'))
+    : []
+
+  if (candidates.length === 0) {
+    throw new Error('اكتمل تشغيل النسخ الاحتياطي لكن لم يُعثر على ملف النسخة (backup_*.sql.gz)')
+  }
+
+  const latest = candidates
+    .map((f) => ({ f, time: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs }))
+    .sort((a, b) => b.time - a.time)[0]
+
+  return {
+    filename: latest.f,
+    path: path.join(BACKUP_DIR, latest.f),
+    sizeBytes: fs.statSync(path.join(BACKUP_DIR, latest.f)).size,
+  }
+}

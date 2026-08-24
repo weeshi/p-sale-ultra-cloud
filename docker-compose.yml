@@ -1,0 +1,84 @@
+# ====================== P-Sale Ultra Cloud — Docker Compose ======================
+# الاستخدام:
+#   cp .env.example .env  ثم عدّل JWT_SECRET
+#   docker compose up -d --build
+#
+# المنافذ:
+#   web     :80      → الواجهة (PWA + reverse proxy /api و /socket.io)
+#   server  :3005    → API (اختياري للوصول المباشر)
+#   db      :3306    → MySQL 8 (داخلي — لا تُعرض للخارج)
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-psale_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-psale_ultra}
+      MYSQL_USER: ${MYSQL_USER:-psale}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-psale_pass}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-psale}:${MYSQL_PASSWORD:-psale_pass}@db:3306/${MYSQL_DATABASE:-psale_ultra}
+    command: ["sh", "-c", "npx prisma migrate deploy"]
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      DATABASE_URL: mysql://${MYSQL_USER:-psale}:${MYSQL_PASSWORD:-psale_pass}@db:3306/${MYSQL_DATABASE:-psale_ultra}
+      FRONTEND_URL: http://localhost
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET مطلوب في .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET مطلوب في .env}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-P-Sale Ultra <noreply@psale.com>}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      EXCHANGE_RATE_API_KEY: ${EXCHANGE_RATE_API_KEY:-}
+      EXCHANGE_RATE_BASE_URL: ${EXCHANGE_RATE_BASE_URL:-https://api.exchangerate-api.com/v4/latest}
+      SYNC_BATCH_SIZE: ${SYNC_BATCH_SIZE:-100}
+      SYNC_INTERVAL_MS: ${SYNC_INTERVAL_MS:-30000}
+    ports:
+      - "3005:3005"
+
+  web:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+
+volumes:
+  db_data:

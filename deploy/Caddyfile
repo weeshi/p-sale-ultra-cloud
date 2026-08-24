@@ -1,0 +1,30 @@
+# =====================================================================
+# P-Sale Ultra Cloud — Reverse Proxy for TLS (Caddy)
+# بديل/مكمل لـ nginx-ssl.conf — يمنحك HTTPS تلقائياً عبر Let's Encrypt
+# الاستخدام:
+#   عدّل اسم النطاق في السطر الأول ثم شغّل:
+#   docker run -d --name caddy -p 80:80 -p 443:443 \
+#     -v $PWD/deploy/Caddyfile:/etc/caddy/Caddyfile \
+#     -v caddy_data:/data -v caddy_config:/config \
+#     --network psale_net caddy:2-alpine
+#   (تأكد أن web تعمل على نفس الشبكة وأنها تعرض منفذ 80)
+# =====================================================================
+
+psale.example.com {
+	encode gzip
+
+	reverse_proxy web:80 {
+		# WebSocket /socket.io عبر Caddy يمر تلقائياً
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "SAMEORIGIN"
+	}
+
+	log {
+		output file /data/logs/access.log
+	}
+}

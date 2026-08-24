@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الأسئلة الشائعة - نظام P-Sale Ultra Cloud</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: #f8faff;
+            color: #1e293b;
+            line-height: 1.7;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header / Nav */
+        .navbar {
+            background: #0f172a;
+            padding: 18px 0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .navbar .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #facc15;
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        .logo svg {
+            width: 36px;
+            height: 36px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: #cbd5e1;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: #facc15;
+        }
+
+        .btn-outline {
+            border: 2px solid #facc15;
+            color: #facc15;
+            padding: 8px 20px;
+            border-radius: 30px;
+            transition: all 0.3s;
+        }
+
+        .btn-outline:hover {
+            background: #facc15;
+            color: #0f172a;
+        }
+
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: white;
+            padding: 70px 0 50px;
+            text-align: center;
+            border-bottom: 6px solid #facc15;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+
+        .hero h1 span {
+            color: #facc15;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            max-width: 700px;
+            margin: 10px auto 0;
+        }
+
+        .hero .badge {
+            display: inline-block;
+            background: #facc15;
+            color: #0f172a;
+            padding: 6px 24px;
+            border-radius: 50px;
+            font-weight: 700;
+            margin-top: 18px;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+        }
+
+        /* FAQ Section */
+        .faq-section {
+            padding: 60px 0 80px;
+        }
+
+        .faq-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .faq-item {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.05);
+            overflow: hidden;
+            transition: box-shadow 0.3s, transform 0.2s;
+            border: 1px solid #e9edf5;
+        }
+
+        .faq-item:hover {
+            box-shadow: 0 16px 48px rgba(0,0,0,0.08);
+            transform: translateY(-2px);
+        }
+
+        .faq-question {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            padding: 22px 30px;
+            cursor: pointer;
+            background: white;
+            transition: background 0.2s;
+        }
+
+        .faq-question:hover {
+            background: #f8faff;
+        }
+
+        .faq-icon {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #eef2ff;
+            border-radius: 14px;
+            font-size: 1.6rem;
+            color: #2563eb;
+        }
+
+        .faq-question h3 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #0f172a;
+            flex: 1;
+        }
+
+        .faq-toggle {
+            font-size: 1.8rem;
+            color: #94a3b8;
+            transition: transform 0.3s;
+        }
+
+        .faq-item.active .faq-toggle {
+            transform: rotate(180deg);
+        }
+
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s;
+            padding: 0 30px;
+            background: #fafcff;
+            border-top: 1px solid transparent;
+        }
+
+        .faq-item.active .faq-answer {
+            max-height: 2000px;
+            padding: 24px 30px 30px;
+            border-top-color: #e2e8f0;
+        }
+
+        .faq-answer p {
+            margin-bottom: 16px;
+            color: #334155;
+            font-size: 1.05rem;
+        }
+
+        .faq-answer ul, .faq-answer ol {
+            margin: 12px 0 16px 20px;
+            color: #334155;
+        }
+
+        .faq-answer li {
+            margin-bottom: 8px;
+        }
+
+        .highlight-box {
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 18px 22px;
+            margin: 16px 0;
+            border-right: 4px solid #2563eb;
+        }
+
+        .highlight-box.warning {
+            border-right-color: #facc15;
+            background: #fefce8;
+        }
+
+        .highlight-box.success {
+            border-right-color: #22c55e;
+            background: #f0fdf4;
+        }
+
+        .svg-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px 20px;
+            margin: 20px 0;
+            padding: 16px;
+            background: white;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .svg-diagram svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .badge-tech {
+            display: inline-block;
+            background: #dbeafe;
+            color: #1e40af;
+            padding: 2px 14px;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin: 0 4px;
+        }
+
+        .footer {
+            background: #0f172a;
+            color: #94a3b8;
+            padding: 40px 0;
+            text-align: center;
+            border-top: 2px solid #1e293b;
+        }
+
+        .footer a {
+            color: #facc15;
+            text-decoration: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.2rem;
+            }
+            .faq-question {
+                padding: 16px 20px;
+                gap: 12px;
+            }
+            .faq-icon {
+                width: 40px;
+                height: 40px;
+                font-size: 1.2rem;
+            }
+            .faq-question h3 {
+                font-size: 1rem;
+            }
+            .faq-answer {
+                padding: 0 20px;
+            }
+            .faq-item.active .faq-answer {
+                padding: 18px 20px 22px;
+            }
+            .navbar .container {
+                flex-direction: column;
+                gap: 12px;
+            }
+            .nav-links {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .hero h1 {
+                font-size: 1.8rem;
+            }
+        }
+
+        /* Animations */
+        .fade-in {
+            animation: fadeUp 0.6s ease forwards;
+            opacity: 0;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .faq-item:nth-child(1) { animation-delay: 0.05s; }
+        .faq-item:nth-child(2) { animation-delay: 0.1s; }
+        .faq-item:nth-child(3) { animation-delay: 0.15s; }
+        .faq-item:nth-child(4) { animation-delay: 0.2s; }
+        .faq-item:nth-child(5) { animation-delay: 0.25s; }
+        .faq-item:nth-child(6) { animation-delay: 0.3s; }
+        .faq-item:nth-child(7) { animation-delay: 0.35s; }
+.faq-item:nth-child(8) { animation-delay: 0.4s; }
+.faq-item:nth-child(9) { animation-delay: 0.45s; }
+    </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar">
+    <div class="container">
+        <div class="logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
+            </svg>
+            <span>P-Sale <span style="color: white;">Ultra</span></span>
+        </div>
+        <div class="nav-links">
+            <a href="#">الرئيسية</a>
+            <a href="#">المميزات</a>
+            <a href="#" class="btn-outline">التوثيق</a>
+        </div>
+    </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+    <div class="container">
+        <h1>📘 الأسئلة الشائعة <span>FAQ</span></h1>
+        <p>كل ما تريد معرفته عن نظام P-Sale Ultra Cloud: Offline-First، المزامنة، حل التعارضات، الأكواد التلقائية، وترقيم الصفحات.</p>
+        <div class="badge">⚡ يعمل حتى في انقطاع الإنترنت</div>
+    </div>
+</section>
+
+<!-- FAQ Section -->
+<section class="faq-section">
+    <div class="container">
+        <div class="faq-grid">
+
+            <!-- سؤال 1 -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">🔌</span>
+                    <h3>ما المقصود بـ "Offline-First" في هذا النظام؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p><strong>Offline-First</strong> تعني أن النظام صُمم ليكون الإنترنت خياراً إضافياً، وليس شرطاً أساسياً للعمل. التطبيق يُثبت على جهاز المستخدم كـ <strong>PWA (تطبيق ويب تقدمي)</strong>، ويخزن كل البيانات محلياً في <strong>IndexedDB</strong>.</p>
+                    <div class="highlight-box">
+                        ✅ كل العمليات (البيع، الشراء، الجرد، السندات) تُنفذ محلياً أولاً، ثم تُزامن تلقائياً عند عودة الاتصال.
+                    </div>
+                    <div class="svg-diagram">
+                        <svg width="480" height="120" viewBox="0 0 480 120" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="10" y="30" width="100" height="50" rx="10" fill="#2563eb" opacity="0.9" />
+                            <text x="60" y="62" fill="white" font-size="14" font-weight="bold" text-anchor="middle">المستخدم</text>
+                            <path d="M120 55 L180 55" stroke="#2563eb" stroke-width="3" />
+                            <rect x="190" y="20" width="120" height="70" rx="10" fill="#facc15" />
+                            <text x="250" y="48" fill="#0f172a" font-size="13" font-weight="bold" text-anchor="middle">IndexedDB</text>
+                            <text x="250" y="68" fill="#0f172a" font-size="11" text-anchor="middle">(البيانات المحلية)</text>
+                            <path d="M320 55 L380 55" stroke="#2563eb" stroke-width="3" stroke-dasharray="6 4" />
+                            <rect x="390" y="30" width="80" height="50" rx="10" fill="#22c55e" />
+                            <text x="430" y="62" fill="white" font-size="14" font-weight="bold" text-anchor="middle">الخادم</text>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- سؤال 2 -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">📡</span>
+                    <h3>هل يستمر النظام في العمل إذا انقطع الإنترنت ليوم كامل؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p><strong>نعم، يعمل بكامل طاقته</strong> وكأن الإنترنت لم ينقطع. إليك ما يحدث:</p>
+                    <ul>
+                        <li><strong>Service Worker</strong> يقدم واجهة التطبيق من ذاكرة التخزين المؤقت.</li>
+                        <li><strong>IndexedDB</strong> تحتوي على جميع البيانات التشغيلية: الأصناف، العملاء، الفواتير، والمخزون.</li>
+                        <li><strong>offlineWrite</strong> يكتب أي عملية (فاتورة، حركة مخزون، سند) فوراً في IndexedDB ويظهرها للمستخدم وكأنها نُفذت.</li>
+                        <li><strong>cachedRead</strong> يقرأ جميع القوائم والتقارير من IndexedDB مباشرة.</li>
+                    </ul>
+                    <div class="highlight-box success">
+                        ✅ لا تُفقد أي بيانات. كل العمليات تُخزن في طابور المزامنة (<strong>SyncQueue</strong>) لحين عودة الإنترنت.
+                    </div>
+                </div>
+            </div>
+
+            <!-- سؤال 3 -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">💾</span>
+                    <h3>ماذا يحدث لبياناتي إذا أغلقت المتصفح أو أعاد تشغيل الجهاز؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p><strong>لا تُفقد البيانات</strong> — IndexedDB هي قاعدة بيانات <strong>مستمرة (Persistent)</strong> على القرص الصلب. إغلاق المتصفح أو إعادة تشغيل الكمبيوتر لا يمسحها.</p>
+                    <div class="highlight-box">
+                        📂 عند فتح المتصفح مجدداً، يعيد Service Worker تحميل الواجهة، وتظهر كل الفواتير والحركات السابقة فوراً.
+                    </div>
+                    <p><span class="badge-tech">⚠️ تحذير</span> الخطر الوحيد هو مسح بيانات التصفح يدوياً (Clear Site Data). ننصح بتفعيل خيار الاحتفاظ بالبيانات في إعدادات المتصفح.</p>
+                </div>
+            </div>
+
+            <!-- سؤال 4 - المزامنة -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">🔄</span>
+                    <h3>كيف تتم عملية المزامنة عند عودة الإنترنت؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p>عند عودة الاتصال، يدخل النظام في <strong>وضع المزامنة التلقائية</strong>. إليك التدفق الكامل:</p>
+                    <ol>
+                        <li><strong>كشف الاتصال</strong>: <code>navigator.onLine</code> + دورة فحص دورية من <strong>SyncContext</strong>.</li>
+                        <li><strong>قراءة الطابور</strong>: يقرأ <strong>SyncQueue</strong> (المخزنة في IndexedDB) جميع العمليات التي تمت أثناء الانقطاع.</li>
+                        <li><strong>الدفع التسلسلي</strong>: يرسل كل عملية إلى الخادم بترتيب حدوثها (FIFO).</li>
+                        <li><strong>تحديث البيانات</strong>: بعد نجاح الدفع، يسحب البيانات الجديدة من الخادم (Pull) لضمان التحديث مع أي تغييرات من فروع أخرى.</li>
+                        <li><strong>تحديث المحلي</strong>: يمسح العمليات الناجحة من الطابور ويحدّث IndexedDB بأحدث البيانات.</li>
+                    </ol>
+                    <div class="svg-diagram">
+                        <svg width="500" height="100" viewBox="0 0 500 100" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="10" y="20" width="120" height="50" rx="8" fill="#2563eb" />
+                            <text x="70" y="50" fill="white" font-size="13" font-weight="bold" text-anchor="middle">IndexedDB</text>
+                            <path d="M140 45 L200 45" stroke="#2563eb" stroke-width="3" />
+                            <rect x="210" y="10" width="120" height="70" rx="8" fill="#facc15" />
+                            <text x="270" y="38" fill="#0f172a" font-size="13" font-weight="bold" text-anchor="middle">SyncQueue</text>
+                            <text x="270" y="58" fill="#0f172a" font-size="11" text-anchor="middle">(طابور العمليات)</text>
+                            <path d="M340 45 L400 45" stroke="#2563eb" stroke-width="3" />
+                            <rect x="410" y="20" width="80" height="50" rx="8" fill="#22c55e" />
+                            <text x="450" y="50" fill="white" font-size="13" font-weight="bold" text-anchor="middle">الخادم</text>
+                        </svg>
+                    </div>
+                    <div class="highlight-box success">
+                        ✅ المزامنة شفافة تماماً — لا يحتاج المستخدم إلى أي تدخل.
+                    </div>
+                </div>
+            </div>
+
+            <!-- سؤال 5 - التعارضات -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">⚔️</span>
+                    <h3>كيف يتعامل النظام مع الفواتير المتضاربة (تعارض البيانات)؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p>التعارضات تحدث عندما يُعدّل مستخدمان نفس البيانات (مثل نفس الصنف) في وضع عدم الاتصال، أو عند استخدام نفس الحساب على جهازين منفصلين.</p>
+                    <p><strong>استراتيجية النظام:</strong></p>
+                    <ul>
+                        <li><strong>قاعدة "Server Wins"</strong>: بيانات الخادم تُعتبر المصدر الرئيسي في حال التعارض الزمني.</li>
+                        <li><strong>مودال حل التعارض</strong>: عند اكتشاف تعارض، يظهر للمستخدم مودال يعرض:
+                            <ul>
+                                <li>البيانات المحلية (التي أنشأها المستخدم).</li>
+                                <li>بيانات الخادم (التي تم تعديلها بواسطة مستخدم آخر).</li>
+                                <li>خيارات: <strong>"إعادة المحاولة"</strong> (إرسال المحلية مرة أخرى)، <strong>"تجاهل"</strong> (الاحتفاظ بخادم)، أو <strong>"عرض الفرق"</strong> لمقارنة تفصيلية.</li>
+                            </ul>
+                        </li>
+                    </ul>
+                    <div class="highlight-box warning">
+                        ⚠️ في حالة التعارض، <strong>يُطلب من المستخدم اتخاذ القرار</strong> — لا يقوم النظام بالحذف أو التعديل دون علم المستخدم.
+                    </div>
+                    <div class="svg-diagram">
+                        <svg width="480" height="100" viewBox="0 0 480 100" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="10" y="15" width="100" height="40" rx="8" fill="#f43f5e" />
+                            <text x="60" y="40" fill="white" font-size="12" font-weight="bold" text-anchor="middle">محلي</text>
+                            <text x="60" y="55" fill="white" font-size="10" text-anchor="middle">(مستخدم أ)</text>
+                            <rect x="130" y="15" width="100" height="40" rx="8" fill="#3b82f6" />
+                            <text x="180" y="40" fill="white" font-size="12" font-weight="bold" text-anchor="middle">خادم</text>
+                            <text x="180" y="55" fill="white" font-size="10" text-anchor="middle">(مستخدم ب)</text>
+                            <path d="M250 35 L300 35" stroke="#facc15" stroke-width="3" stroke-dasharray="6 4" />
+                            <rect x="310" y="10" width="150" height="70" rx="10" fill="#facc15" />
+                            <text x="385" y="34" fill="#0f172a" font-size="13" font-weight="bold" text-anchor="middle">مودال التعارض</text>
+                            <text x="385" y="54" fill="#0f172a" font-size="11" text-anchor="middle">اختر: إعادة / تجاهل / تفاصيل</text>
+                            <text x="385" y="72" fill="#0f172a" font-size="11" text-anchor="middle">⬅️ يحل المستخدم</text>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- سؤال 6 -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">📦</span>
+                    <h3>هل هناك حدود لحجم البيانات التي يمكن تخزينها محلياً؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p>نعم، المتصفحات تخصص حصة تخزينية لكل موقع (Origin)، عادة ما بين <strong>50% إلى 80%</strong> من المساحة المتاحة على القرص الصلب.</p>
+                    <ul>
+                        <li>لمتجر كمبيوتر متوسط (فواتير سنوية < 10,000 فاتورة)، حجم البيانات عادة لا يتجاوز <strong>50 ميجابايت</strong> — وهو أقل بكثير من الحصة.</li>
+                        <li>في حال تجاوز الحصة، يظهر خطأ <code>QuotaExceededError</code> (نادر جداً).</li>
+                    </ul>
+                    <div class="highlight-box">
+                        💡 <strong>توصية:</strong> ننصح بتنظيف البيانات القديمة (فواتير أكثر من سنتين) دورياً عبر أداة "تنظيف البيانات" في الإعدادات.
+                    </div>
+                </div>
+            </div>
+
+            <!-- سؤال 7 -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">🖥️</span>
+                    <h3>ماذا يحدث إذا استخدمت نفس الحساب على جهازين أثناء الانقطاع؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p>كل جهاز يحتفظ بنسخته المحلية المستقلة. عند عودة الإنترنت، تحدث تعارضات بين النسختين.</p>
+                    <p><strong>آلية الحل:</strong></p>
+                    <ul>
+                        <li>يُكتشف التعارض تلقائياً بواسطة <strong>Timestamp</strong> (النسخة الأحدث تفوز في حالة التعديلات على نفس السجل).</li>
+                        <li>إذا كانت التعارضات معقدة (مثل فاتورتين مختلفتين لنفس العميل)، يظهر <strong>مودال حل التعارض</strong> للمستخدم لاختيار الإجراء المناسب.</li>
+                    </ul>
+                    <div class="highlight-box warning">
+                        ⚠️ يفضل استخدام جهاز واحد لكل موظف لتجنب التعارضات غير الضرورية.
+                    </div>
+                </div>
+            </div>
+
+            <!-- سؤال 8 -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">🏷️</span>
+                    <h3>كيف تعمل أكواد الأصناف والعملاء التلقائية؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p>النظام يولّد أكواد فريدة تلقائياً لكل صنف وعميل/مورد عند الإنشاء:</p>
+                    <ul>
+                        <li><strong>الأصناف</strong>: صيغة <code>ITM-000001</code>، <code>ITM-000002</code>، ... — يزداد تلقائياً مع كل صنف جديد.</li>
+                        <li><strong>الأطراف (عملاء/موردين)</strong>: صيغة <code>PTY-000001</code>، <code>PTY-000002</code>، ... — نفس المنطق.</li>
+                    </ul>
+                    <div class="highlight-box success">
+                        ✅ لا يحتاج المستخدم لإدخال الكود يدوياً — يظهر حقل "تلقائي" في نموذج الإنشاء ويُولَّد الكود عند الحفظ. لا يمكن تعديل الكود بعد الإنشاء لضمان عدم التعارض.
+                    </div>
+                    <p>يُستخدم نفس نظام التسلسل (SequenceService) المستخدم لأرقام الفواتير والمستندات، مما يضمن عدم تكرار الأكواد حتى مع عمليات متزامنة.</p>
+                </div>
+            </div>
+
+            <!-- سؤال 9 -->
+            <div class="faq-item fade-in">
+                <div class="faq-question">
+                    <span class="faq-icon">📄</span>
+                    <h3>ما هو ترقيم الصفحات (Pagination) ولماذا هو مهم؟</h3>
+                    <span class="faq-toggle">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <p>عند وجود عدد كبير من الأصناف أو العملاء أو الفواتير، يمنع ترقيم الصفحات تحميل كل البيانات دفعة واحدة. النظام يعرض 25 سجلاً كحد افتراضي مع إمكانية التوسع:</p>
+                    <ul>
+                        <li><strong>25</strong> — الافتراضي (أسرع تحميل)</li>
+                        <li><strong>50 / 100 / 200</strong> — تكبير حجم الصفحة</li>
+                        <li><strong>الكل</strong> — عرض جميع السجلات (يُستخدم عند تصدير البيانات)</li>
+                    </ul>
+                    <div class="highlight-box">
+                        💡 عند تغيير فلتر البحث (مثل اختيار فئة محددة)، تُعاد الصفحة تلقائياً إلى الصفحة الأولى لتجنب فقدان النتائج.
+                    </div>
+                    <p>يُطبّق على صفحات: الأصناف، العملاء، عروض الأسعار، المشتريات، التحويلات، حركات المخزون، وجدول الفواتير.</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+    <div class="container">
+        <p>© 2026 <a href="#">P-Sale Ultra Cloud</a> — نظام متكامل لإدارة المبيعات والمخازن والمحاسبة.</p>
+        <p style="margin-top: 8px; font-size: 0.9rem;">Offline-First · Multi-Branch · Dual-Currency · Serial Tracking</p>
+    </div>
+</footer>
+
+<script>
+    document.querySelectorAll('.faq-question').forEach(q => {
+        q.addEventListener('click', function() {
+            const item = this.parentElement;
+            const isActive = item.classList.contains('active');
+            // إغلاق جميع الأسئلة المفتوحة (اختياري: لفتح واحد فقط)
+            // document.querySelectorAll('.faq-item').forEach(el => el.classList.remove('active'));
+            // if (!isActive) item.classList.add('active');
+            // تبسيط: تبديل الحالة الحالية
+            item.classList.toggle('active');
+        });
+    });
+
+    // فتح أول سؤال افتراضياً
+    document.querySelector('.faq-item').classList.add('active');
+</script>
+
+</body>
+</html>

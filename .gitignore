@@ -1,0 +1,53 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.test
+server/.env
+server/.env.production
+client/.env
+
+# Build outputs
+dist/
+build/
+*.exe
+*.dll
+*.node
+
+# Logs
+logs/
+*.log
+backups/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Playwright
+playwright-report/
+test-results/
+
+# Temp files
+*.tmp
+*.temp
+
+# Backup env files
+server/.env.bak.*
+
+# SQL backups
+*.sql
+
+# Python migration scripts
+migrate_items.py

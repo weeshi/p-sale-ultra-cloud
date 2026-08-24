@@ -1,0 +1,1181 @@
+// ============================================
+// P-Sale Ultra Cloud - Database Schema
+// MySQL/MariaDB for cloud + SQLite for offline
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Multi-tenant: الشركات
+// ============================================
+model Company {
+  id              Int      @id @default(autoincrement())
+  name            String   @db.VarChar(255)
+  address         String?  @db.Text
+  phone           String?  @db.VarChar(50)
+  mobile          String?  @db.VarChar(50)
+  taxNumber       String?  @map("tax_number")
+  logo            String?  @db.Text
+  fiscalYearStart Int      @default(1) @map("fiscal_year_start")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  users            User[]
+  accounts         Account[]
+  items            Item[]
+  parties          Party[]
+  treasuries       Treasury[]
+  warehouses       Warehouse[]
+  branches         Branch[]
+  units            Unit[]
+  attributes       Attribute[]
+  brands           Brand[]
+  categories       Category[]
+  exchangeRates    ExchangeRate[]
+  journalEntries   JournalEntry[]
+  syncLogs         SyncLog[]
+  serials          Serial[]
+  stock            Stock[]
+  stockMovements   StockMovement[]
+  inventoryCounts  InventoryCount[]
+  purchaseOrders   PurchaseOrder[]
+  shipments        Shipment[]
+  purchaseInvoices PurchaseInvoice[]
+  quotes           Quote[]
+  saleInvoices     SaleInvoice[]
+  receipts         Receipt[]
+  stockTransfers   StockTransfer[]
+  warranties       Warranty[]
+  rmas             Rma[]
+  sequences        Sequence[]
+  bankReconciliations BankReconciliation[]
+
+  @@map("companies")
+}
+
+// ============================================
+// تسلسل أرقام الفواتير (آمن للتوافق المتزامن)
+// ============================================
+model Sequence {
+  id           Int      @id @default(autoincrement())
+  companyId    Int      @map("company_id")
+  prefix       String   @db.VarChar(20)
+  currentValue Int      @default(0) @map("current_value")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, prefix])
+  @@map("sequences")
+}
+
+// ============================================
+// المستخدمون والصلاحيات
+// ============================================
+model User {
+  id            Int       @id @default(autoincrement())
+  companyId     Int       @map("company_id")
+  username      String    @unique @db.VarChar(100)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  fullName      String    @map("full_name") @db.VarChar(255)
+  email         String?   @db.VarChar(255)
+  phone         String?   @db.VarChar(50)
+  role          String    @default("user") // admin, manager, accountant, cashier, viewer
+  branchId      Int?      @map("branch_id")
+  isActive      Boolean   @default(true) @map("is_active")
+  isSuperAdmin  Boolean   @default(false) @map("is_super_admin")
+  superAdminKey Int?      @map("super_admin_key") // = companyId عند السوبر أدمن وإلا null — فريد (واحد لكل شركة)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+
+  company        Company         @relation(fields: [companyId], references: [id])
+  branch         Branch?         @relation(fields: [branchId], references: [id])
+  permissions    Permission[]
+  auditLogs      AuditLog[]
+  stockMovements StockMovement[] @relation("MovementCreator")
+  journalEntries JournalEntry[]
+  countsCreated  InventoryCount[] @relation("CountCreator")
+  countsPosted   InventoryCount[] @relation("CountPoster")
+
+  @@unique([superAdminKey])
+  @@map("users")
+}
+
+model Permission {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  module    String   @db.VarChar(50)
+  canView   Boolean  @default(false) @map("can_view")
+  canAdd    Boolean  @default(false) @map("can_add")
+  canEdit   Boolean  @default(false) @map("can_edit")
+  canDelete Boolean  @default(false) @map("can_delete")
+  canPrint  Boolean  @default(false) @map("can_print")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, module])
+  @@map("permissions")
+}
+
+// ============================================
+// الهيكل: الفروع والمخازن
+// ============================================
+model Branch {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  name      String   @db.VarChar(255)
+  code      String   @db.VarChar(20)
+  address   String?  @db.Text
+  phone     String?  @db.VarChar(50)
+  isMain    Boolean  @default(false) @map("is_main")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company          Company            @relation(fields: [companyId], references: [id])
+  users            User[]
+  warehouses       Warehouse[]
+  saleInvoices     SaleInvoice[]
+  purchaseInvoices PurchaseInvoice[]
+  purchaseOrders   PurchaseOrder[]
+  treasuries       Treasury[]
+  reconciliations  BankReconciliation[]
+
+  @@unique([companyId, code])
+  @@map("branches")
+}
+
+model Warehouse {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  branchId  Int?     @map("branch_id")
+  name      String   @db.VarChar(255)
+  code      String   @db.VarChar(20)
+  type      String   @default("regular") // central, branch, damaged, returned, display
+  address   String?  @db.Text
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company          Company           @relation(fields: [companyId], references: [id])
+  branch           Branch?           @relation(fields: [branchId], references: [id])
+  stock            Stock[]
+  serials          Serial[]
+  movements        StockMovement[]
+  transferOut      StockTransfer[]   @relation("TransferFrom")
+  transferIn       StockTransfer[]   @relation("TransferTo")
+  counts           InventoryCount[]
+  purchaseInvoices PurchaseInvoice[]
+  saleInvoices     SaleInvoice[]
+
+  @@unique([companyId, code])
+  @@map("warehouses")
+}
+
+// ============================================
+// دليل الحسابات (Chart of Accounts)
+// ============================================
+model Account {
+  id             Int       @id @default(autoincrement())
+  companyId      Int       @map("company_id")
+  accountCode    String    @map("account_code") @db.VarChar(20)
+  accountName    String    @map("account_name") @db.VarChar(255)
+  accountType    String    @map("account_type") @db.VarChar(50) // asset, liability, equity, revenue, expense
+  parentId       Int?      @map("parent_id")
+  parent         Account?  @relation("AccountTree", fields: [parentId], references: [id])
+  children       Account[] @relation("AccountTree")
+  isTerminal     Boolean   @default(true) @map("is_terminal")
+  openingBalance Decimal   @default(0) @map("opening_balance") @db.Decimal(15, 3)
+  currentBalance Decimal   @default(0) @map("current_balance") @db.Decimal(15, 3)
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  company       Company            @relation(fields: [companyId], references: [id])
+  journalLines  JournalEntryLine[]
+  items         Item[]             @relation("ItemInventoryAccount")
+  itemsCogs     Item[]             @relation("ItemCogsAccount")
+  itemsSales    Item[]             @relation("ItemSalesAccount")
+  itemsPurchase Item[]             @relation("ItemPurchaseAccount")
+  parties       Party[]
+  treasuries    Treasury[]
+
+  @@unique([companyId, accountCode])
+  @@index([companyId, accountType])
+  @@map("accounts")
+}
+
+// ============================================
+// الدليل: الأصناف والتصنيفات والخصائص
+// ============================================
+model Category {
+  id        Int        @id @default(autoincrement())
+  companyId Int        @map("company_id")
+  name      String     @db.VarChar(255)
+  parentId  Int?       @map("parent_id")
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  icon      String?    @db.VarChar(50)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  items   Item[]
+
+  @@map("categories")
+}
+
+model Brand {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  name      String   @db.VarChar(255)
+  logo      String?  @db.Text
+  country   String?  @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  items   Item[]
+
+  @@map("brands")
+}
+
+model Unit {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  name      String   @db.VarChar(50)
+  shortName String   @map("short_name") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  items   Item[]
+
+  @@map("units")
+}
+
+model Attribute {
+  id           Int      @id @default(autoincrement())
+  companyId    Int      @map("company_id")
+  name         String   @db.VarChar(100) // السعة، الجيل، النوع، التقنية
+  type         String   @db.VarChar(20) // text, number, select, multi-select
+  options      String?  @db.Text // JSON array for select types
+  isFilterable Boolean  @default(true) @map("is_filterable")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  company Company         @relation(fields: [companyId], references: [id])
+  values  ItemAttribute[]
+
+  @@map("attributes")
+}
+
+model Item {
+  id          Int     @id @default(autoincrement())
+  companyId   Int     @map("company_id")
+  itemCode    String  @map("item_code") @db.VarChar(50)
+  barcode     String? @unique @db.VarChar(100)
+  itemName    String  @map("item_name") @db.VarChar(255)
+  modelNumber String? @map("model_number") @db.VarChar(100)
+  categoryId  Int?    @map("category_id")
+  brandId     Int?    @map("brand_id")
+  unitId      Int?    @map("unit_id")
+  description String? @db.Text
+  image       String? @db.Text
+
+  // الأسعار
+  purchasePrice    Decimal @default(0) @map("purchase_price") @db.Decimal(15, 3)
+  purchasePriceUsd Decimal @default(0) @map("purchase_price_usd") @db.Decimal(15, 3)
+  salePrice        Decimal @default(0) @map("sale_price") @db.Decimal(15, 3)
+  wholesalePrice   Decimal @default(0) @map("wholesale_price") @db.Decimal(15, 3)
+  costPrice        Decimal @default(0) @map("cost_price") @db.Decimal(15, 3) // متوسط التكلفة
+
+  // المخزون
+  currentStock Decimal @default(0) @map("current_stock") @db.Decimal(15, 3)
+  damagedStock  Decimal @default(0) @map("damaged_stock") @db.Decimal(15, 3) // كمية تالفة (تُستثنى من الصالح)
+  openingStock  Decimal @default(0) @map("opening_stock") @db.Decimal(15, 3)
+  minStock     Decimal @default(0) @map("min_stock") @db.Decimal(15, 3)
+  reorderLevel Decimal @default(0) @map("reorder_level") @db.Decimal(15, 3)
+  location     String? @db.VarChar(100)
+
+  // التتبع
+  trackSerial Boolean @default(false) @map("track_serial") // تتبع برقم تسلسلي
+  isBundle    Boolean @default(false) @map("is_bundle") // منتج مركب
+  isActive    Boolean @default(true) @map("is_active")
+  isService   Boolean @default(false) @map("is_service")
+  taxRate     Decimal @default(0) @map("tax_rate") @db.Decimal(5, 2)
+
+  // حسابات محاسبية
+  inventoryAccountId Int? @map("inventory_account_id")
+  cogsAccountId      Int? @map("cogs_account_id")
+  salesAccountId     Int? @map("sales_account_id")
+  purchaseAccountId  Int? @map("purchase_account_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company            Company               @relation(fields: [companyId], references: [id])
+  category           Category?             @relation(fields: [categoryId], references: [id])
+  brand              Brand?                @relation(fields: [brandId], references: [id])
+  unit               Unit?                 @relation(fields: [unitId], references: [id])
+  attributes         ItemAttribute[]
+  stock              Stock[]
+  serials            Serial[]
+  purchaseItems      PurchaseInvoiceItem[]
+  saleItems          SaleInvoiceItem[]
+  quoteItems         QuoteItem[]
+  bundleParts        BundlePart[]          @relation("BundleParent")
+  bundleOf           BundlePart[]          @relation("BundleChild")
+  movements          StockMovement[]
+  transfers          StockTransferItem[]
+  countItems         InventoryCountItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  rmaItems           RmaItem[]
+
+  inventoryAccount Account? @relation("ItemInventoryAccount", fields: [inventoryAccountId], references: [id])
+  cogsAccount      Account? @relation("ItemCogsAccount", fields: [cogsAccountId], references: [id])
+  salesAccount     Account? @relation("ItemSalesAccount", fields: [salesAccountId], references: [id])
+  purchaseAccount  Account? @relation("ItemPurchaseAccount", fields: [purchaseAccountId], references: [id])
+
+  @@unique([companyId, itemCode])
+  @@index([barcode])
+  @@index([companyId, categoryId])
+  @@index([companyId, brandId])
+  @@map("items")
+}
+
+// الخصائص الديناميكية للأصناف
+model ItemAttribute {
+  id          Int      @id @default(autoincrement())
+  itemId      Int      @map("item_id")
+  attributeId Int      @map("attribute_id")
+  value       String   @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  item      Item      @relation(fields: [itemId], references: [id])
+  attribute Attribute @relation(fields: [attributeId], references: [id])
+
+  @@unique([itemId, attributeId])
+  @@map("item_attributes")
+}
+
+// مكونات الباقة/المنتج المركب
+model BundlePart {
+  id           Int      @id @default(autoincrement())
+  parentItemId Int      @map("parent_item_id")
+  childItemId  Int      @map("child_item_id")
+  quantity     Decimal  @default(1) @db.Decimal(15, 3)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  parentItem Item @relation("BundleParent", fields: [parentItemId], references: [id])
+  childItem  Item @relation("BundleChild", fields: [childItemId], references: [id])
+
+  @@unique([parentItemId, childItemId])
+  @@map("bundle_parts")
+}
+
+// الأرقام التسلسلية / IMEI
+model Serial {
+  id             Int       @id @default(autoincrement())
+  companyId      Int       @map("company_id")
+  itemId         Int       @map("item_id")
+  warehouseId    Int?      @map("warehouse_id")
+  serialNumber   String    @unique @map("serial_number") @db.VarChar(100)
+  status         String    @default("in_stock") // in_stock, sold, warranty, returned, damaged, in_transit
+  costPrice      Decimal   @default(0) @map("cost_price") @db.Decimal(15, 3)
+  salePrice      Decimal   @default(0) @map("sale_price") @db.Decimal(15, 3)
+  warrantyMonths Int?      @map("warranty_months")
+  warrantyEndsAt DateTime? @map("warranty_ends_at")
+  soldAt         DateTime? @map("sold_at")
+  saleItemId     Int?      @map("sale_item_id")
+  purchaseItemId Int?      @map("purchase_item_id")
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  company      Company?             @relation(fields: [companyId], references: [id])
+  item         Item                 @relation(fields: [itemId], references: [id])
+  warehouse    Warehouse?           @relation(fields: [warehouseId], references: [id])
+  saleItem     SaleInvoiceItem?     @relation(fields: [saleItemId], references: [id])
+  purchaseItem PurchaseInvoiceItem? @relation(fields: [purchaseItemId], references: [id])
+  warranties   Warranty[]
+  rmas         RmaItem[]
+  movements    SerialMovement[]
+
+  @@index([companyId, status])
+  @@index([itemId])
+  @@map("serials")
+}
+
+model SerialMovement {
+  id              Int      @id @default(autoincrement())
+  serialId        Int      @map("serial_id")
+  fromWarehouseId Int?     @map("from_warehouse_id")
+  toWarehouseId   Int?     @map("to_warehouse_id")
+  fromStatus      String   @map("from_status")
+  toStatus        String   @map("to_status")
+  referenceType   String?  @map("reference_type")
+  referenceId     Int?     @map("reference_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  createdBy       Int?     @map("created_by")
+
+  serial Serial @relation(fields: [serialId], references: [id])
+
+  @@map("serial_movements")
+}
+
+// ============================================
+// الدليل: العملاء والموردين
+// ============================================
+model Party {
+  id             Int      @id @default(autoincrement())
+  companyId      Int      @map("company_id")
+  partyCode      String   @map("party_code") @db.VarChar(50)
+  partyName      String   @map("party_name") @db.VarChar(255)
+  partyType      String   @map("party_type") @db.VarChar(20) // customer, vendor, both
+  address        String?  @db.Text
+  phone          String?  @db.VarChar(50)
+  mobile         String?  @db.VarChar(50)
+  email          String?  @db.VarChar(255)
+  whatsapp       String?  @db.VarChar(50)
+  taxNumber      String?  @map("tax_number") @db.VarChar(50)
+  creditLimit    Decimal  @default(0) @map("credit_limit") @db.Decimal(15, 3)
+  openingBalance Decimal  @default(0) @map("opening_balance") @db.Decimal(15, 3)
+  currentBalance Decimal  @default(0) @map("current_balance") @db.Decimal(15, 3)
+  accountId      Int?     @map("account_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  company          Company           @relation(fields: [companyId], references: [id])
+  account          Account?          @relation(fields: [accountId], references: [id])
+  purchaseInvoices PurchaseInvoice[]
+  saleInvoices     SaleInvoice[]
+  quotes           Quote[]
+  receipts         Receipt[]
+  purchaseOrders   PurchaseOrder[]
+  rmas             Rma[]
+  warranties       Warranty[]
+
+  @@unique([companyId, partyCode])
+  @@index([companyId, partyType])
+  @@map("parties")
+}
+
+// ============================================
+// الخزائن
+// ============================================
+model Treasury {
+  id             Int      @id @default(autoincrement())
+  companyId      Int      @map("company_id")
+  branchId       Int?     @map("branch_id")
+  treasuryName   String   @map("treasury_name") @db.VarChar(255)
+  treasuryType   String   @map("treasury_type") @db.VarChar(20) // cash, bank, mobile_money
+  currency       String   @default("LYD") @db.VarChar(3) // LYD, USD
+  currentBalance Decimal  @default(0) @map("current_balance") @db.Decimal(15, 3)
+  openingBalance Decimal  @default(0) @map("opening_balance") @db.Decimal(15, 3)
+  accountId      Int?     @map("account_id")
+  bankName       String?  @map("bank_name") @db.VarChar(100)
+  accountNumber  String?  @map("account_number") @db.VarChar(100)
+  iban           String?  @db.VarChar(50)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  company          Company           @relation(fields: [companyId], references: [id])
+  branch           Branch?           @relation(fields: [branchId], references: [id])
+  account          Account?          @relation(fields: [accountId], references: [id])
+  receipts         Receipt[]
+  saleInvoices     SaleInvoice[]
+  purchaseInvoices PurchaseInvoice[]
+  bankReconciliations BankReconciliation[]
+
+  @@index([branchId])
+  @@map("treasuries")
+}
+
+// ============================================
+// أسعار الصرف
+// ============================================
+model ExchangeRate {
+  id           Int      @id @default(autoincrement())
+  companyId    Int      @map("company_id")
+  fromCurrency String   @map("from_currency") @db.VarChar(3)
+  toCurrency   String   @map("to_currency") @db.VarChar(3)
+  rate         Decimal  @db.Decimal(15, 6)
+  isAuto       Boolean  @default(true) @map("is_auto")
+  rateDate     DateTime @map("rate_date")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, fromCurrency, toCurrency, rateDate])
+  @@map("exchange_rates")
+}
+
+// ============================================
+// المخزون: رصيد لكل مخزن
+// ============================================
+model Stock {
+  id           Int      @id @default(autoincrement())
+  companyId    Int      @map("company_id")
+  itemId       Int      @map("item_id")
+  warehouseId  Int      @map("warehouse_id")
+  quantity     Decimal  @default(0) @db.Decimal(15, 3)
+  damagedStock Decimal  @default(0) @map("damaged_stock") @db.Decimal(15, 3) // كمية تالفة في هذا المخزن
+  minStock     Decimal  @default(0) @map("min_stock") @db.Decimal(15, 3)
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  company   Company   @relation(fields: [companyId], references: [id])
+  item      Item      @relation(fields: [itemId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([itemId, warehouseId])
+  @@map("stock")
+}
+
+// ============================================
+// حركات المخزون
+// ============================================
+model StockMovement {
+  id            Int      @id @default(autoincrement())
+  companyId     Int      @map("company_id")
+  movementDate  DateTime @map("movement_date")
+  movementType  String   @map("movement_type") // purchase, sale, opening, adjustment, transfer_in, transfer_out, return, count_adjustment
+  referenceType String?  @map("reference_type")
+  referenceId   Int?     @map("reference_id")
+  itemId        Int      @map("item_id")
+  warehouseId   Int?     @map("warehouse_id")
+  quantity      Decimal  @db.Decimal(15, 3)
+  unitCost      Decimal? @map("unit_cost") @db.Decimal(15, 3)
+  totalCost     Decimal? @map("total_cost") @db.Decimal(15, 3)
+  balanceAfter  Decimal? @map("balance_after") @db.Decimal(15, 3)
+  notes         String?  @db.Text
+  createdBy     Int?     @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  item      Item       @relation(fields: [itemId], references: [id])
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
+  creator   User?      @relation("MovementCreator", fields: [createdBy], references: [id])
+
+  @@index([itemId, warehouseId])
+  @@index([movementDate])
+  @@map("stock_movements")
+}
+
+// ============================================
+// الجرد
+// ============================================
+model InventoryCount {
+  id            Int       @id @default(autoincrement())
+  companyId     Int       @map("company_id")
+  warehouseId   Int       @map("warehouse_id")
+  countNumber   String    @map("count_number") @db.VarChar(50)
+  status        String    @default("draft") // draft, in_progress, completed, posted
+  countDate     DateTime  @map("count_date")
+  notes         String?   @db.Text
+  parentCountId Int?      @map("parent_count_id") // للجرد التصحيحي: أصل excerpt
+  createdBy     Int?      @map("created_by")
+  completedAt   DateTime? @map("completed_at")
+  postedAt      DateTime? @map("posted_at")
+  postedBy      Int?      @map("posted_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  company      Company               @relation(fields: [companyId], references: [id])
+  warehouse    Warehouse            @relation(fields: [warehouseId], references: [id])
+  items        InventoryCountItem[]
+  parentCount  InventoryCount?      @relation("CountCorrective", fields: [parentCountId], references: [id])
+  correctives  InventoryCount[]     @relation("CountCorrective")
+  creator      User?                @relation("CountCreator", fields: [createdBy], references: [id])
+  poster       User?                @relation("CountPoster", fields: [postedBy], references: [id])
+
+  @@index([parentCountId])
+  @@map("inventory_counts")
+}
+
+model InventoryCountItem {
+  id                Int      @id @default(autoincrement())
+  countId           Int      @map("count_id")
+  itemId            Int      @map("item_id")
+  systemQty         Decimal  @map("system_qty") @db.Decimal(15, 3)
+  countedQty        Decimal  @map("counted_qty") @db.Decimal(15, 3)
+  countedGoodQty    Decimal  @map("counted_good_qty") @db.Decimal(15, 3)
+  countedDamagedQty Decimal  @map("counted_damaged_qty") @db.Decimal(15, 3)
+  difference        Decimal  @default(0) @db.Decimal(15, 3)
+  unitCost          Decimal? @map("unit_cost") @db.Decimal(15, 3)
+  varianceValue     Decimal? @map("variance_value") @db.Decimal(15, 3)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  count InventoryCount @relation(fields: [countId], references: [id])
+  item  Item           @relation(fields: [itemId], references: [id])
+
+  @@unique([countId, itemId])
+  @@map("inventory_count_items")
+}
+
+// ============================================
+// أوامر الشراء (من الصين / موردين)
+// ============================================
+model PurchaseOrder {
+  id                Int       @id @default(autoincrement())
+  companyId         Int       @map("company_id")
+  branchId          Int?      @map("branch_id")
+  poNumber          String    @map("po_number") @db.VarChar(50)
+  poDate            DateTime  @map("po_date")
+  partyId           Int       @map("party_id") // المورد
+  currency          String    @default("USD") @db.VarChar(3)
+  exchangeRate      Decimal   @default(1) @map("exchange_rate") @db.Decimal(15, 6)
+  status            String    @default("draft") // draft, sent, confirmed, partially_received, received, cancelled
+  subtotal          Decimal   @default(0) @db.Decimal(15, 3)
+  shippingCost      Decimal   @default(0) @map("shipping_cost") @db.Decimal(15, 3)
+  customsCost       Decimal   @default(0) @map("customs_cost") @db.Decimal(15, 3)
+  insuranceCost     Decimal   @default(0) @map("insurance_cost") @db.Decimal(15, 3)
+  otherCosts        Decimal   @default(0) @map("other_costs") @db.Decimal(15, 3)
+  discount          Decimal   @default(0) @db.Decimal(15, 3)
+  totalAmount       Decimal   @default(0) @map("total_amount") @db.Decimal(15, 3)
+  totalAmountUsd    Decimal   @default(0) @map("total_amount_usd") @db.Decimal(15, 3)
+  advancePaid       Decimal   @default(0) @map("advance_paid") @db.Decimal(15, 3)
+  lcNumber          String?   @map("lc_number") @db.VarChar(100) // اعتماد بنكي
+  lcBank            String?   @map("lc_bank") @db.VarChar(100)
+  expectedArrival   DateTime? @map("expected_arrival")
+  actualArrival     DateTime? @map("actual_arrival")
+  targetWarehouseId Int?      @map("target_warehouse_id")
+  notes             String?   @db.Text
+  createdBy         Int?      @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  company   Company             @relation(fields: [companyId], references: [id])
+  branch    Branch?             @relation(fields: [branchId], references: [id])
+  party     Party               @relation(fields: [partyId], references: [id])
+  items     PurchaseOrderItem[]
+  shipments Shipment[]
+
+  @@index([poNumber])
+  @@index([branchId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              Int      @id @default(autoincrement())
+  purchaseOrderId Int      @map("purchase_order_id")
+  itemId          Int      @map("item_id")
+  quantity        Decimal  @db.Decimal(15, 3)
+  unitPriceUsd    Decimal  @map("unit_price_usd") @db.Decimal(15, 3)
+  unitPriceLyd    Decimal  @map("unit_price_lyd") @db.Decimal(15, 3)
+  discount        Decimal  @default(0) @db.Decimal(15, 3)
+  totalUsd        Decimal  @map("total_usd") @db.Decimal(15, 3)
+  totalLyd        Decimal  @map("total_lyd") @db.Decimal(15, 3)
+  receivedQty     Decimal  @default(0) @map("received_qty") @db.Decimal(15, 3)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  item          Item          @relation(fields: [itemId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+// الشحنات
+model Shipment {
+  id              Int       @id @default(autoincrement())
+  companyId       Int       @map("company_id")
+  purchaseOrderId Int?      @map("purchase_order_id")
+  shipmentNumber  String    @map("shipment_number") @db.VarChar(50)
+  carrier         String?   @db.VarChar(100)
+  trackingNumber  String?   @map("tracking_number") @db.VarChar(100)
+  portOfLoading   String?   @map("port_of_loading") @db.VarChar(100)
+  portOfDischarge String?   @map("port_of_discharge") @db.VarChar(100)
+  shipmentDate    DateTime? @map("shipment_date")
+  arrivalDate     DateTime? @map("arrival_date")
+  shippingCost    Decimal   @default(0) @map("shipping_cost") @db.Decimal(15, 3)
+  customsCost     Decimal   @default(0) @map("customs_cost") @db.Decimal(15, 3)
+  status          String    @default("in_transit") // preparing, in_transit, arrived, cleared, delivered
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  @@map("shipments")
+}
+
+// ============================================
+// فواتير الشراء
+// ============================================
+model PurchaseInvoice {
+  id              Int      @id @default(autoincrement())
+  companyId       Int      @map("company_id")
+  branchId        Int?     @map("branch_id")
+  invoiceNumber   String   @map("invoice_number") @db.VarChar(50)
+  invoiceDate     DateTime @map("invoice_date")
+  partyId         Int      @map("party_id")
+  warehouseId     Int?     @map("warehouse_id")
+  treasuryId      Int?     @map("treasury_id")
+  purchaseOrderId Int?     @map("purchase_order_id")
+  currency        String   @default("USD") @db.VarChar(3)
+  exchangeRate    Decimal  @default(1) @map("exchange_rate") @db.Decimal(15, 6)
+  subtotal        Decimal  @default(0) @db.Decimal(15, 3)
+  taxRate         Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount       Decimal  @default(0) @map("tax_amount") @db.Decimal(15, 3)
+  discount        Decimal  @default(0) @db.Decimal(15, 3)
+  shippingCost    Decimal  @default(0) @map("shipping_cost") @db.Decimal(15, 3)
+  customsCost     Decimal  @default(0) @map("customs_cost") @db.Decimal(15, 3)
+  total           Decimal  @default(0) @db.Decimal(15, 3)
+  paidAmount      Decimal  @default(0) @map("paid_amount") @db.Decimal(15, 3)
+  paymentStatus   String   @default("unpaid") @map("payment_status") // paid, partial, unpaid
+  payType         String?  @map("pay_type") @db.VarChar(20) // cash, credit, banking
+  bankingService  String?  @map("banking_service") @db.VarChar(100) // مصرف الوحدة، موبي كاش، etc.
+  journalEntryId  Int?     @map("journal_entry_id")
+  status          String   @default("posted")
+  notes           String?  @db.Text
+  createdBy       Int?     @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  company      Company               @relation(fields: [companyId], references: [id])
+  branch       Branch?               @relation(fields: [branchId], references: [id])
+  party        Party                 @relation(fields: [partyId], references: [id])
+  warehouse    Warehouse?            @relation(fields: [warehouseId], references: [id])
+  treasury     Treasury?             @relation(fields: [treasuryId], references: [id])
+  items        PurchaseInvoiceItem[]
+  journalEntry JournalEntry?         @relation("PurchaseJournal", fields: [journalEntryId], references: [id])
+
+  @@index([invoiceNumber])
+  @@index([invoiceDate])
+  @@index([branchId])
+  @@map("purchase_invoices")
+}
+
+model PurchaseInvoiceItem {
+  id           Int      @id @default(autoincrement())
+  invoiceId    Int      @map("invoice_id")
+  itemId       Int      @map("item_id")
+  quantity     Decimal  @db.Decimal(15, 3)
+  unitPrice    Decimal  @map("unit_price") @db.Decimal(15, 3)
+  unitPriceUsd Decimal  @map("unit_price_usd") @db.Decimal(15, 3)
+  landedCost   Decimal  @default(0) @map("landed_cost") @db.Decimal(15, 3) // تكلفة الوصول الموزعة
+  unitCost     Decimal  @default(0) @map("unit_cost") @db.Decimal(15, 3) // التكلفة النهائية بعد التوزيع
+  discount     Decimal  @default(0) @db.Decimal(15, 3)
+  total        Decimal  @db.Decimal(15, 3)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  invoice PurchaseInvoice @relation(fields: [invoiceId], references: [id])
+  item    Item            @relation(fields: [itemId], references: [id])
+  serials Serial[]
+
+  @@map("purchase_invoice_items")
+}
+
+// ============================================
+// عروض الأسعار (فاتورة عرض)
+// ============================================
+model Quote {
+  id            Int       @id @default(autoincrement())
+  companyId     Int       @map("company_id")
+  quoteNumber   String    @map("quote_number") @db.VarChar(50)
+  quoteDate     DateTime  @map("quote_date")
+  partyId       Int?      @map("party_id")
+  branchId      Int?      @map("branch_id")
+  validUntil    DateTime? @map("valid_until")
+  status        String    @default("draft") // draft, sent, accepted, rejected, converted
+  subtotal      Decimal   @default(0) @db.Decimal(15, 3)
+  taxRate       Decimal   @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount     Decimal   @default(0) @map("tax_amount") @db.Decimal(15, 3)
+  discount      Decimal   @default(0) @db.Decimal(15, 3)
+  total         Decimal   @default(0) @db.Decimal(15, 3)
+  notes         String?   @db.Text
+  saleInvoiceId Int?      @map("sale_invoice_id") // الفاتورة بعد التحويل
+  createdBy     Int?      @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  company Company     @relation(fields: [companyId], references: [id])
+  party   Party?      @relation(fields: [partyId], references: [id])
+  items   QuoteItem[]
+
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id        Int      @id @default(autoincrement())
+  quoteId   Int      @map("quote_id")
+  itemId    Int      @map("item_id")
+  quantity  Decimal  @db.Decimal(15, 3)
+  unitPrice Decimal  @map("unit_price") @db.Decimal(15, 3)
+  discount  Decimal  @default(0) @db.Decimal(15, 3)
+  total     Decimal  @db.Decimal(15, 3)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  quote Quote @relation(fields: [quoteId], references: [id])
+  item  Item  @relation(fields: [itemId], references: [id])
+
+  @@map("quote_items")
+}
+
+// ============================================
+// فواتير البيع
+// ============================================
+model SaleInvoice {
+  id             Int      @id @default(autoincrement())
+  companyId      Int      @map("company_id")
+  branchId       Int?     @map("branch_id")
+  warehouseId    Int?     @map("warehouse_id")
+  invoiceNumber  String   @map("invoice_number") @db.VarChar(50)
+  invoiceDate    DateTime @map("invoice_date")
+  partyId        Int?     @map("party_id")
+  treasuryId     Int?     @map("treasury_id")
+  quoteId        Int?     @map("quote_id")
+  invoiceType    String   @default("sale") @map("invoice_type") // sale, return
+  subtotal       Decimal  @default(0) @db.Decimal(15, 3)
+  taxRate        Decimal  @default(0) @map("tax_rate") @db.Decimal(5, 2)
+  taxAmount      Decimal  @default(0) @map("tax_amount") @db.Decimal(15, 3)
+  discount       Decimal  @default(0) @db.Decimal(15, 3)
+  total          Decimal  @default(0) @db.Decimal(15, 3)
+  paidAmount     Decimal  @default(0) @map("paid_amount") @db.Decimal(15, 3)
+  paymentStatus  String   @default("unpaid") @map("payment_status") // paid, partial, unpaid
+  payType        String?  @map("pay_type") @db.VarChar(20) // cash, credit, banking
+  bankingService String?  @map("banking_service") @db.VarChar(100) // مصرف الوحدة، موبي كاش، etc.
+  journalEntryId Int?     @map("journal_entry_id")
+  status         String   @default("posted") // draft, posted, void
+  notes          String?  @db.Text
+  createdBy      Int?     @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  company      Company           @relation(fields: [companyId], references: [id])
+  branch       Branch?           @relation(fields: [branchId], references: [id])
+  warehouse    Warehouse?        @relation(fields: [warehouseId], references: [id])
+  party        Party?            @relation(fields: [partyId], references: [id])
+  treasury     Treasury?         @relation(fields: [treasuryId], references: [id])
+  items        SaleInvoiceItem[]
+  journalEntry JournalEntry?     @relation("SaleJournal", fields: [journalEntryId], references: [id])
+  warranties   Warranty[]
+
+  @@index([invoiceNumber])
+  @@index([invoiceDate])
+  @@map("sale_invoices")
+}
+
+model SaleInvoiceItem {
+  id        Int      @id @default(autoincrement())
+  invoiceId Int      @map("invoice_id")
+  itemId    Int      @map("item_id")
+  quantity  Decimal  @db.Decimal(15, 3)
+  unitPrice Decimal  @map("unit_price") @db.Decimal(15, 3)
+  costPrice Decimal  @default(0) @map("cost_price") @db.Decimal(15, 3)
+  discount  Decimal  @default(0) @db.Decimal(15, 3)
+  total     Decimal  @db.Decimal(15, 3)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  invoice SaleInvoice @relation(fields: [invoiceId], references: [id])
+  item    Item        @relation(fields: [itemId], references: [id])
+  serials Serial[]
+
+  @@map("sale_invoice_items")
+}
+
+// ============================================
+// سندات القبض والصرف
+// ============================================
+model Receipt {
+  id                Int       @id @default(autoincrement())
+  companyId         Int       @map("company_id")
+  receiptNumber     String    @map("receipt_number") @db.VarChar(50)
+  receiptDate       DateTime  @map("receipt_date")
+  receiptType       String    @map("receipt_type") // receipt, payment
+  partyId           Int?      @map("party_id")
+  treasuryId        Int?      @map("treasury_id")
+  branchId          Int?      @map("branch_id")
+  currency          String    @default("LYD") @db.VarChar(3)
+  exchangeRate      Decimal   @default(1) @map("exchange_rate") @db.Decimal(15, 6)
+  amount            Decimal   @db.Decimal(15, 3)
+  amountUsd         Decimal   @default(0) @map("amount_usd") @db.Decimal(15, 3)
+  paymentMethod     String    @default("cash") @map("payment_method") // cash, check, transfer, card
+  checkNumber       String?   @map("check_number") @db.VarChar(100)
+  checkDate         DateTime? @map("check_date")
+  bankName          String?   @map("bank_name") @db.VarChar(100)
+  referenceNo       String?   @map("reference_no") @db.VarChar(100)
+  saleInvoiceId     Int?      @map("sale_invoice_id")
+  purchaseInvoiceId Int?      @map("purchase_invoice_id")
+  journalEntryId    Int?      @map("journal_entry_id")
+  notes             String?   @db.Text
+  createdBy         Int?      @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  company      Company       @relation(fields: [companyId], references: [id])
+  party        Party?        @relation(fields: [partyId], references: [id])
+  treasury     Treasury?     @relation(fields: [treasuryId], references: [id])
+  journalEntry JournalEntry? @relation("ReceiptJournal", fields: [journalEntryId], references: [id])
+  reconciliations BankReconciliationLine[]
+
+  @@map("receipts")
+}
+
+// ============================================
+// التسوية البنكية (مطابقة الحساب البنكي مع كشف المصرف)
+// ============================================
+model BankReconciliation {
+  id               Int      @id @default(autoincrement())
+  companyId        Int      @map("company_id")
+  branchId         Int?     @map("branch_id")
+  treasuryId       Int      @map("treasury_id")
+  reconNumber      String   @map("recon_number") @db.VarChar(50)
+  statementDate    DateTime @map("statement_date")
+  openingBalance   Decimal  @default(0) @map("opening_balance") @db.Decimal(15, 3)
+  statementBalance Decimal  @default(0) @map("statement_balance") @db.Decimal(15, 3)
+  systemBalance    Decimal  @default(0) @map("system_balance") @db.Decimal(15, 3)
+  difference       Decimal  @default(0) @db.Decimal(15, 3)
+  status           String   @default("draft") // draft, matched, completed
+  notes            String?  @db.Text
+  createdBy        Int?     @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  company  Company                    @relation(fields: [companyId], references: [id])
+  branch   Branch?                    @relation(fields: [branchId], references: [id])
+  treasury Treasury                   @relation(fields: [treasuryId], references: [id])
+  lines    BankReconciliationLine[]
+
+  @@index([treasuryId])
+  @@index([branchId])
+  @@map("bank_reconciliations")
+}
+
+model BankReconciliationLine {
+  id              Int      @id @default(autoincrement())
+  reconciliationId Int     @map("reconciliation_id")
+  receiptId       Int      @map("receipt_id")
+  isMatched       Boolean  @default(false) @map("is_matched")
+  note            String?  @db.VarChar(255)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  reconciliation BankReconciliation @relation(fields: [reconciliationId], references: [id])
+  receipt        Receipt            @relation(fields: [receiptId], references: [id])
+
+  @@unique([reconciliationId, receiptId])
+  @@index([receiptId])
+  @@map("bank_reconciliation_lines")
+}
+
+// ============================================
+// القيود المحاسبية (دفتر الأستاذ)
+// ============================================
+model JournalEntry {
+  id            Int            @id @default(autoincrement())
+  companyId     Int            @map("company_id")
+  entryNumber   Int            @map("entry_number")
+  entryDate     DateTime       @map("entry_date")
+  entryType     String         @map("entry_type") // purchase, sale, receipt, payment, adjusting, opening, transfer, return
+  referenceType String?        @map("reference_type")
+  referenceId   Int?           @map("reference_id")
+  branchId      Int?           @map("branch_id")
+  description   String?        @db.Text
+  totalDebit    Decimal        @default(0) @map("total_debit") @db.Decimal(15, 3)
+  totalCredit   Decimal        @default(0) @map("total_credit") @db.Decimal(15, 3)
+  currency      String         @default("LYD") @db.VarChar(3)
+  exchangeRate  Decimal        @default(1) @map("exchange_rate") @db.Decimal(15, 6)
+  isPosted      Boolean        @default(true) @map("is_posted")
+  isReversed    Boolean        @default(false) @map("is_reversed")
+  reversedById  Int?           @map("reversed_by_id")
+  reversedBy    JournalEntry?  @relation("ReverseRelation", fields: [reversedById], references: [id])
+  reverseOf     JournalEntry[] @relation("ReverseRelation")
+  createdBy     Int?           @map("created_by")
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  company          Company            @relation(fields: [companyId], references: [id])
+  lines            JournalEntryLine[]
+  creator          User?              @relation(fields: [createdBy], references: [id])
+  purchaseInvoices PurchaseInvoice[]  @relation("PurchaseJournal")
+  saleInvoices     SaleInvoice[]      @relation("SaleJournal")
+  receipts         Receipt[]          @relation("ReceiptJournal")
+
+  @@index([entryDate])
+  @@index([referenceType, referenceId])
+  @@map("journal_entries")
+}
+
+model JournalEntryLine {
+  id             Int      @id @default(autoincrement())
+  journalEntryId Int      @map("journal_entry_id")
+  lineNumber     Int      @map("line_number")
+  accountId      Int      @map("account_id")
+  description    String?  @db.VarChar(255)
+  debit          Decimal  @default(0) @db.Decimal(15, 3)
+  credit         Decimal  @default(0) @db.Decimal(15, 3)
+  partyId        Int?     @map("party_id")
+  currency       String   @default("LYD") @db.VarChar(3)
+  currencyAmount Decimal? @map("currency_amount") @db.Decimal(15, 3)
+
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id])
+  account      Account      @relation(fields: [accountId], references: [id])
+
+  @@index([accountId])
+  @@map("journal_entry_lines")
+}
+
+// ============================================
+// تحويلات المخزون بين الفروع
+// ============================================
+model StockTransfer {
+  id              Int       @id @default(autoincrement())
+  companyId       Int       @map("company_id")
+  transferNumber  String    @map("transfer_number") @db.VarChar(50)
+  transferDate    DateTime  @map("transfer_date")
+  fromWarehouseId Int       @map("from_warehouse_id")
+  toWarehouseId   Int       @map("to_warehouse_id")
+  status          String    @default("pending") // pending, requested, approved, in_transit, received, rejected, cancelled
+  transferType    String    @default("transfer") @map("transfer_type") // transfer, branch_request, return_to_central
+  requestedBy     Int?      @map("requested_by")
+  approvedBy      Int?      @map("approved_by")
+  receivedBy      Int?      @map("received_by")
+  approvedAt      DateTime? @map("approved_at")
+  receivedAt      DateTime? @map("received_at")
+  notes           String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  company       Company             @relation(fields: [companyId], references: [id])
+  fromWarehouse Warehouse           @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse           @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  items         StockTransferItem[]
+
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id          Int      @id @default(autoincrement())
+  transferId  Int      @map("transfer_id")
+  itemId      Int      @map("item_id")
+  quantity    Decimal  @db.Decimal(15, 3)
+  unitCost    Decimal  @map("unit_cost") @db.Decimal(15, 3)
+  receivedQty Decimal? @map("received_qty") @db.Decimal(15, 3)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  transfer StockTransfer @relation(fields: [transferId], references: [id])
+  item     Item          @relation(fields: [itemId], references: [id])
+
+  @@map("stock_transfer_items")
+}
+
+// ============================================
+// الضمان والصيانة RMA
+// ============================================
+model Warranty {
+  id             Int      @id @default(autoincrement())
+  companyId      Int      @map("company_id")
+  warrantyNumber String   @map("warranty_number") @db.VarChar(50)
+  serialId       Int      @map("serial_id")
+  saleInvoiceId  Int?     @map("sale_invoice_id")
+  partyId        Int?     @map("party_id")
+  startDate      DateTime @map("start_date")
+  endDate        DateTime @map("end_date")
+  warrantyType   String   @map("warranty_type") // manufacturer, store, extended
+  status         String   @default("active") // active, expired, claimed, void
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  company     Company      @relation(fields: [companyId], references: [id])
+  serial      Serial       @relation(fields: [serialId], references: [id])
+  saleInvoice SaleInvoice? @relation(fields: [saleInvoiceId], references: [id])
+  party       Party?       @relation(fields: [partyId], references: [id])
+  rmas        Rma[]
+
+  @@map("warranties")
+}
+
+model Rma {
+  id                  Int       @id @default(autoincrement())
+  companyId           Int       @map("company_id")
+  rmaNumber           String    @map("rma_number") @db.VarChar(50)
+  rmaDate             DateTime  @map("rma_date")
+  partyId             Int       @map("party_id")
+  warrantyId          Int?      @map("warranty_id")
+  rmaType             String    @map("rma_type") // repair, replace, refund, return
+  status              String    @default("open") // open, received, diagnosed, repairing, awaiting_parts, repaired, replaced, refunded, closed
+  issueDescription    String?   @map("issue_description") @db.Text
+  diagnosis           String?   @db.Text
+  actionTaken         String?   @map("action_taken") @db.Text
+  technicianId        Int?      @map("technician_id")
+  repairCost          Decimal   @default(0) @map("repair_cost") @db.Decimal(15, 3)
+  partsCost           Decimal   @default(0) @map("parts_cost") @db.Decimal(15, 3)
+  receivedAt          DateTime? @map("received_at")
+  returnedAt          DateTime? @map("returned_at")
+  replacementSerialId Int?      @map("replacement_serial_id")
+  notes               String?   @db.Text
+  createdBy           Int?      @map("created_by")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  party    Party     @relation(fields: [partyId], references: [id])
+  warranty Warranty? @relation(fields: [warrantyId], references: [id])
+  items    RmaItem[]
+
+  @@map("rmas")
+}
+
+model RmaItem {
+  id        Int      @id @default(autoincrement())
+  rmaId     Int      @map("rma_id")
+  serialId  Int?     @map("serial_id")
+  itemId    Int      @map("item_id")
+  quantity  Decimal  @default(1) @db.Decimal(15, 3)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  rma    Rma     @relation(fields: [rmaId], references: [id])
+  serial Serial? @relation(fields: [serialId], references: [id])
+  item   Item    @relation(fields: [itemId], references: [id])
+
+  @@map("rma_items")
+}
+
+// ============================================
+// سجل التدقيق
+// ============================================
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  companyId Int      @map("company_id")
+  userId    Int?     @map("user_id")
+  action    String   @db.VarChar(20)
+  tableName String   @map("table_name") @db.VarChar(100)
+  eventType String?  @map("event_type") @db.VarChar(50)
+  recordId  Int?     @map("record_id")
+  oldValues String?  @map("old_values") @db.Text
+  newValues String?  @map("new_values") @db.Text
+  ipAddress String?  @map("ip_address") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([tableName, recordId])
+  @@map("audit_logs")
+}
+
+// ============================================
+// سجل المزامنة
+// ============================================
+model SyncLog {
+  id           Int       @id @default(autoincrement())
+  companyId    Int       @map("company_id")
+  deviceId     String    @map("device_id") @db.VarChar(255)
+  syncType     String    @map("sync_type") @db.VarChar(50)
+  tablesSynced String?   @map("tables_synced") @db.Text
+  recordsCount Int       @default(0) @map("records_count")
+  status       String    @default("success")
+  errorMessage String?   @map("error_message") @db.Text
+  startedAt    DateTime  @default(now()) @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@map("sync_logs")
+}

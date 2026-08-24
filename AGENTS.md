@@ -1,0 +1,323 @@
+# AGENTS.md — دستور العمل الدستوري لمشروع P-Sale Ultra Cloud
+
+## 🎯 الرؤية والهدف الاستراتيجي
+
+إعادة بناء منظومة **P-Sale Ultra** (Delphi/Paradox، 2013) كنظام **ويب حديث (PWA)** لمتجر كمبيوتر وإلكترونيات:
+- **Offline-First**: يعمل بالكامل دون إنترنت، مزامنة ثنائية الاتجاه عند توفر الاتصال
+- **Multi-Branch**: فروع متعددة، مخازن مركزية/فرعية، تحويلات مخزون (STO)
+- **Dual-Currency**: دينار ليبي (LYD) أساسي + دولار (USD) للاستيراد، تحديث سعر صرف يومي تلقائي
+- **Serial/IMEI Tracking**: تتبع كامل للأرقام التسلسلية، باركود/QR، ضمان + صيانة + RMA
+- **Assembly & Bundles**: تجميع أجهزة، باقات (Kits)، أوامر شراء بالدولار مع Landed Cost
+
+---
+
+## 🏗️ البنية التقنية المعتمدة (Decision Log)
+
+| الطبقة | التقنية | السبب |
+|----------|---------|-------|
+| **Backend API** | Node.js + Express + TypeScript (ES2022, NodeNext) | نضج البيئة، نظام أنواع قوي، أداء جيد |
+| **Database** | MySQL 8 + Prisma ORM | علاقات معقدة، دعم Decimal، migrations آمنة |
+| **Frontend** | React 18 + Vite + Tailwind CSS + PWA (Workbox) | حزمة خفيفة، HMR سريع، تثبيت كتطبيق |
+| **Offline Engine** | IndexedDB (idb) + Service Worker + Sync Queue | تخزين محلي، مزامنة خلفية، كشف اتصال |
+| **Real-time** | Socket.IO (company + branch rooms، مصادقة JWT) | إشعارات لحظية، تحديثات تعاونية |
+| **Auth** | JWT (access + refresh) + bcryptjs | Stateless، توكنات قصيرة/طويلة الأجل |
+| **Validation** | express-validator + Prisma types | تحقق مبكر، types مشتركة |
+
+---
+
+## 📁 هيكل المشروع (Monorepo-lite)
+
+```
+p-sale-ultra-cloud/
+├── server/                 # Backend (Node/Express)
+│   ├── src/
+│   │   ├── config/         # env, database, logger
+│   │   ├── middleware/     # auth, audit, error, rate-limit
+│   │   ├── routes/         # 18 ملف مسارات REST
+│   │   ├── services/       # 13 خدمة أعمال (Domain Logic)
+│   │   └── app.ts          # نقطة الدخول + Socket.IO
+│   ├── prisma/
+│   │   └── schema.prisma   # ~40 موديل (ERD كامل)
+│   ├── package.json
+│   └── tsconfig.json       # rootDir: ".." ← key for shared/
+├── client/                 # Frontend (React PWA) — قيد الإنشاء
+│   └── src/
+├── shared/                 # كود مشترك (Types + Utils)
+│   ├── constants.ts        # Enums، جورنال، حالات، أدوار
+│   └── utils.ts            # generateNumber, barcode, weightedAverage, toDecimal
+├── scripts/                # سكربتات النسخ الاحتياطي والاستعادة/الإدارة
+│   ├── backup.ps1          # نسخ احتياطي Windows
+│   ├── backup.sh           # نسخ احتياطي Linux
+│   ├── restore.ps1         # استعادة Windows
+│   ├── restore.sh          # استعادة Linux
+│   ├── restore-manager.ps1 # مساعد الاستعادة التفاعلي
+│   ├── restore-assistant.cmd # مزدوج نقر لمساعد الاستعادة
+│   ├── rotate-jwt-secrets.ps1 # تدوير مفاتيح JWT
+│   ├── win/                # سكربتات إدارة النظام (Windows)
+│   │   ├── start.ps1       # تشغيل الخدمات
+│   │   ├── stop.ps1        # إيقاف الخدمات
+│   │   ├── restart.ps1     # إعادة تشغيل الخدمات
+│   │   └── status.ps1      # حالة الخدمات + health check
+│   └── linux/              # سكربتات إدارة النظام (Linux)
+│       ├── start.sh        # تشغيل الخدمات
+│       ├── stop.sh         # إيقاف الخدمات
+│       ├── restart.sh      # إعادة تشغيل الخدمات
+│       └── status.sh       # حالة الخدمات + health check
+├── manage.cmd              # واجهة إدارة نصية (Windows)
+├── ecosystem.config.cjs    # إعدادات PM2
+├── AGENTS.md               # هذا الملف (دستور النظام)
+└── README.md               # توثيق عام
+```
+
+---
+
+## ✅ ما تم إنجازه (Backend Complete — TypeScript Clean)
+
+| المكون | الحالة | ملاحظات |
+|---------|--------|---------|
+| **Prisma Schema** | ✅ مكتمل | 40+ موديل، علاقات كاملة، فهارس، cascade |
+| **Shared Utils/Constants** | ✅ مكتمل | عملة، باركود، متوسط موزون، توليد أرقام |
+| **Auth Service + Routes** | ✅ مكتمل | Login, Refresh, Setup أولي، JWT، صلاحيات |
+| **Accounting Service** | ✅ مكتمل | قيد آلي لكل معاملة، ميزان، قائمة دخل، ميزانية، عكس قيد |
+| **Sale Service** | ✅ مكتمل | فواتير بيع/مرتجع، عروض أسعار، ضمان تلقائي، أرقام تسلسلية |
+| **Purchase Service** | ✅ مكتمل | **Triple-Track**: أمر استيراد (USD) مع Landed Cost + استلام/توزيع حصص، فاتورة محلية مبسّطة بقيم مزدوجة (unitPriceUsd/unitPriceLyd) تُخزَّن مباشرة، + `GET /purchases` الموحد للثلاثة |
+| **Inventory Service** | ✅ مكتمل | حركات مخزون، متوسط تكلفة، أرقام تسلسلية، جرد، تحويلات |
+| **Treasury Service** | ✅ مكتمل | سندات قبض/صرف، خزائن LYD فقط (2 لكل فرع: كاش + مصرف)، عملات، قيد محاسبي — **`branchId`** على `Treasury` و `BankReconciliation` مع عزل فرع كامل، `resolveBranchScope` في GET، تحقق ملكية الفرع في CREATE/RECEIPT |
+| **Report Service** | ✅ مكتمل | مبيعات، مخزون، عملاء، خزينة، أرقام تسلسلية، ضمان، أرباح، Dashboard |
+| **Sync Service** | ✅ مكتمل | Push/Pull/Status، CDC مبسط، conflict resolution |
+| **Exchange Rate Service** | ✅ مكتمل | جلب يومي، تحويل، تاريخ أسعار |
+| **Notification Service** | ✅ مكتمل | Email/SMS/WhatsApp (stub) |
+| **Sequence Service** | ✅ **مكتمل** | أرقام مستندات آمنة ضد التزامن (SELECT ... FOR UPDATE)، بذر تلقائي عند الإعداد — مرتبط بـ Purchase/Sale/Treasury + أكواد تلقائية (ITM/PTY) |
+| **Barcode/Warranty/Services** | ✅ مكتمل | توليد/مسح، ضمان، RMA |
+| **All Routes (19)** | ✅ مكتمل | RESTful، middleware auth/authorize، validation — **جديد**: `POST /settings/users` (إنشاء مستخدم، admin فقط) + `GET /warehouses` يدعم فلتر `?branchId=` + `PUT/DELETE /warehouses/branches/:id` و`PUT/DELETE /warehouses/:id` (تعديل/حذف فعلي بقيود للفروع والمخازن + إعادة ربط المخزن بفرعه) + **منطقة الخطر**: `POST /settings/backup-before-reset` (نسخة احتياطية تُعاد كملف للتنزيل، سوبر أدمن فقط) + `POST /settings/reset-database` (تفريغ انتقائي، كلمة مرور السوبر أدمن + Rate Limit 1/ساعة) |
+| **Backup + Danger-Zone Services** | ✅ **مكتمل** | `backupService` (تشغيل `scripts/backup.ps1`/`.sh` + أحدث `backups/*.sql.gz`) + `cleanupService.resetDatabase` (33 deleteMany مرتّبة حسب FK + إعادة ضبط sequences/أرصدة الحسابات/الخزائن داخل ترانزاكشن) |
+| **App.ts + Socket.IO** | ✅ **مكتمل** | Health، مسارات، `initRealtime` (**JWT auth** + غرف شركة/فرع مشتقة من التوكن) + `notifyTransfer` (أحداث `transfer:*` بلا استعلام DB)، error handling |
+| **TypeScript Build** | ✅ **Clean** | `npx tsc` صفر أخطاء، emit صحيح مع `shared/` |
+| **Frontend Core** | ✅ **مكتمل** | Vite + React + TS + Tailwind + PWA + Auth + Layout RTL + Login/Setup/Dashboard |
+| **Offline Engine** | ✅ **مكتمل** | SyncContext + offlineWrite + cachedRead + auto-sync + Conflict UI |
+| **Pages — Catalog** | ✅ **مكتمل** | Items CRUD + Parties CRUD + إعدادات الكتالوج (فئات/ماركات/وحدات/خصائص) |
+| **Pages — Sales** | ✅ **مكتمل** | POS-like فاتورة بيع (غير touch) + عرض سعر + Serial Picker + طباعة/واتساب/بريد + تحويل عرض لفواتير |
+| **Pages — Purchase** | ✅ **مكتمل** | **Triple-Track**: صفحة موحدة `/purchases` (تبويبات الكل/استيراد/محلي/داخلي + فلاتر) + `LocalPurchaseInvoice.tsx` (فاتورة محلية، LYD افتراضي، تسعير مزدوج يدوي $ + د.ل) + `ImportOrderCreate.tsx` (أمر استيراد USD — تكاليف الوصول والاعتمادات في "خيارات متقدمة") + `ImportOrderReceive.tsx` (استلام مع Landed Cost + سيريالات) + طباعة |
+| **Pages — Inventory** | ✅ **مكتمل** | **وحدة المخزون كاملة**: تحويلات (إنشاء/اعتماد/إلغاء/استلام + سيريالات + استلام جزئي) + جرد (إنشاء بحرق CNT + إدخال كميات + حفظ جماعي + ترحيل) + حركات + تقييم + مخزون منخفض — محور `InventoryHub` بتبويبات |
+| **Pages — Accounting (8.1-8.10)** | ✅ **مكتمل** | `JournalEntries.tsx` + `TrialBalance.tsx` + `IncomeStatement.tsx` + `BalanceSheet.tsx` + `ChartOfAccounts.tsx` + `AccountLedger.tsx` + `PartyLedger.tsx` + `AccountingHub.tsx` (لوحة بطاقات على `/accounting`) — Offline-First عبر `cachedRead`/`offlineWrite`، طباعة عبر `printDocument`، تبويبات `AccountingTabs`؛ مسارات `/accounting/*` |
+| **Pages — Treasury (9.1-9.7)** | ✅ **مكتمل** | `Treasuries.tsx` (خزائن LYD فقط + إنشاء + فلتر فرع `?branchId=`) + `Receipts.tsx` (سندات قبض/صرف: فلاتر/صفحات/تفاصيل/إنشاء مزدوج LYD-USD/طباعة + فلتر فرع `?branchId=`) + `BankReconciliation.tsx` (تسوية بنكية: جلب سندات خزينة بنكية + مطابقة ✓ + رصيد/فرق + إغلاق) + `TreasuryHub.tsx` (تبويبات على `/treasury`) — **معزولة بالفرع**: الخزائن والحسابات تقدم فقط بيانات فرع المستخدم |
+| **Pages — Settings (10.1-10.6)** | ✅ **مكتمل** | `CompanySettings.tsx` (بيانات الشركة) + `UsersSettings.tsx` (مستخدمون + **صلاحيات تفصيلية لكل وحدة عبر الأدوار**) + `BranchesWarehouses.tsx` (فروع/مخازن + **ربط إجباري للمخزن بفرعه** + **تعديل/حذف فعلي بقيود + إعادة ربط المخزن بفرعه**) + `ExchangeRates.tsx` (أسعار صرف + سجل + تحديث تلقائي) + `AuditLogs.tsx` (سجل تدقيق بفلاتر/صفحات/تفاصيل) + `SettingsHub.tsx` (تبويبات على `/settings`) + **`DangerZone.tsx` (تبويب «📛 منطقة الخطر» يظهر للسوبر أدمن فقط على `/settings/danger-zone`)**: خطوة 1 نسخة احتياطية إجبارية تُنزَّل مباشرة (`POST /settings/backup-before-reset` → Blob) + خطوة 2 تفريغ انتقائي بكلمة مرور السوبر أدمن (`POST /settings/reset-database`) ثم `navigate('/login?reset=1')` — ويقوم `AuthContext` بمسح IndexedDB (`resetOfflineStorage`) + localStorage + sessionStorage — **السعر الافتراضي للشراء** أصبح يُقرأ حياً من `/exchange/rate/USD/LYD` — **إدارة المستخدمين تدعم الأدوار والصلاحيات التفصيلية**: زر/مودال «إضافة مستخدم» (`POST /settings/users`، admin فقط) + قائمة دور تعيد تعبئة جدول الصلاحيات اليدوي بوصفة الدور الافتراضية ثم يبقى قابلاً للتخصيص؛ وصفات الأدوار في `shared/constants.ts` (`ROLE_PERMISSION_PRESETS` + `buildRolePermissions`) — admin=الكل، manager=إدارة بلا حذف (باستثناء عرض فقط للإعدادات/المستخدمين)، accountant=حسابات/يومية/خزينة بلا حذف، **cashier=view/add/print على sales و treasury فقط**، viewer=عرض فقط؛ **`canDelete` محجوز للأدمن فقط** (كل الأدوار الأخرى بلا حذف) |
+| **الأمان والعزل (Branch Isolation)** | ✅ **منفَّذ في الكود** | Namespacing كامل (User + Branch) في IndexedDB في المفتاح المركب `table:${table}:user:${userId}:branch:${branchId}`، حماية السيرفر ضد تزوير الطابور (`syncQueue` تحمل `userId`/`branchId` ويُتحقق منها **من التوكن** في `pushChanges` — رفض + `IDENTITY_TAMPERING`/`BRANCH_ACCESS_DENIED` في `AuditLog` عبر عمود `event_type` الجديد)، فلتر `eventType` في `AuditLogs.tsx`، سياسة احتفاظ الكاش `pruneOldUserCaches` بآخر 3 مستخدمين — التفاصيل في قسم «🔐 نموذج الأمن والعزل» أدناه + [`SECURITY.md`](./SECURITY.md) |
+| **إدارة الفروع والمخازن (CRUD)** | ✅ **مكتمل (منفَّذ في الكود)** | `PUT/DELETE /warehouses/branches/:id` و `PUT/DELETE /warehouses/:id` (حذف فعلي بقيود + إعادة ربط المخزن بفرعه) + `updated_at` لـ `branches`/`warehouses` لسحب تعديلات المزامنة — migration `20260819200000_add_updated_at_branch_warehouse` + `syncService` يسحب الانتين عبر `updatedAt` |
+
+---
+
+## 🔧 قرارات حاسمة يجب الحفاظ عليها (Immutable Decisions)
+
+1. **Journal Entries = مصدر الحقيقة المحاسبي**
+   - كل معاملة تنشئ قيدًا تلقائيًا عبر `accountingService.createJournalEntry()`
+   - الحقول الإلزامية: `entryNumber` (تسلسلي لكل شركة)، `totalDebit === totalCredit`
+   - الأرصدة تحدث داخل نفس التراكشن (Account + Party)
+
+2. **Decimal Handling Pattern** — ثابت في كل الخدمات:
+   ```typescript
+   // قراءة من Prisma (Decimal) → تحويل للعمليات الحسابية
+   value.toNumber()
+   // كتابة لـ Prisma → toDecimal(number, 3)
+   ```
+
+3. **Multi-Tenancy via `companyId`**
+   - كل query يبدأ بـ `where: { companyId: req.companyId }`
+   - middleware `authenticate` يحقن `req.companyId`، `req.user`، `req.branchId`
+
+4. **Serial Numbers = كيان مستقل**
+   - نموذج `Serial` منفصل، حالة `IN_STOCK | SOLD | RETURNED | IN_MAINTENANCE | LOST`
+   - ربط بـ `saleInvoiceItem`، `purchaseInvoiceItem`، `warranty`
+
+5. **Import Pricing (China → Central → Branches)**
+   - PO بالـ USD مع `exchangeRate` يوم الاستلام
+   - `landedCost` (شحن+جمارك+تأمين) يوزع بنسبة قيمة الصنف (`shareRatio`)
+   - `unitCostLyd = (unitPriceUsd + landedShare/qty) * exchangeRate`
+
+6. **Sync Queue Architecture**
+   - جدول `SyncQueue` (outbox) + `SyncLog` (inbox)
+   - Client يدفع `push`، يسحب `pull` مع `lastSyncedAt`
+   - Conflict: server-wins مع timestamp، manual resolve للأخطاء
+
+7. **Document Numbers = SequenceService (Row-level Lock)**
+   - كل رقم مستند (فاتورة بيع/مرتجع، عرض سعر، أمر/فاتورة شراء، سند قبض/صرف، تحويل، ضمان/RMA) يُولّد عبر `sequenceService.next(companyId, prefix, tx)` داخل نفس التراكشن
+   - **أكواد تلقائية**: أصناف (`ITM-XXXXXX`) وأطراف (`PTY-XXXXXX`) — لا تُقبل يدوياً من الواجهة
+   - `SELECT ... FOR UPDATE` على جدول `sequences` يمنع تكرار الأرقام عند الحفظ المتزامن من جلسات متعددة (بديل آمن لنمط `count + 1`)
+   - البادئات في `SEQUENCE_PREFIXES` (15 بادئة: INV/RET/QOT/PO/PINV/RCV/PAY/TRN/CNT/WRN/RMA/JRN/RC/ITM/PTY) وتُزرع تلقائياً في `authService.setup()`
+
+8. **Triple-Track Purchase System (فصل تدفقات الشراء)**
+   - **Local Purchase (فاتورة شراء محلية)**: مسار مبسّط بلا تكاليف وصول — العملة الافتراضية **LYD**، تسعير مزدوج يدوي لكل صنف (`unitPriceUsd` + `unitPriceLyd`)، الإجماليات = مجموع فعلي بالدينار + مرجعي بالدولار. الـ Backend يخزّن الأسعار المدخلة مباشرةً دون أي توزيع.
+   - **Import Order (أمر استيراد)**: يُبقي منطق Landed Cost كاملاً (القرار #5) — الشحن/الجمارك/التأمين/أخرى تُوزّع بنسبة قيمة الصنف عند الاستلام. حقول الاعتمادات (LC) وتكاليف الوصول **مخفية خلف "خيارات متقدمة"** في الواجهة لتنظيف الشاشة دون المساس بالمنطق.
+   - **Internal Request (طلب داخلي)**: طلبات/تحويلات بين المخازن والفروع عبر `StockTransfer` (`transferType='branch_request'`) — تُعرض ضمن تبويب "طلبات داخلية" في صفحة المشتريات الموحدة.
+   - **صفحة مشتريات موحدة**: `GET /purchases` يجمع المسارات الثلاثة (local/import/internal) في شكل موحد `{ key, type, number, date, partyId, partyName, direction, warehouseId, warehouseName, total, totalUsd, currency, status, notes, raw }` مع فلاتر `type/page/limit/from/to/partyId/warehouseId/status`؛ الصفحة `Purchases.tsx` تعرضها بتبويبات (الكل/استيراد/محلي/داخلي) وعدّادات وفلاتر. **حُذف** `GET /orders/list` القديم (لا توافقية).
+   - **سعر الصرف الافتراضي**: `DEFAULT_EXCHANGE_RATE_USD_LYD` (shared/constants.ts) هو الاحتياطي الخلفي؛ السعر الحالي يُقرأ حياً من `GET /api/exchange/rate/USD/LYD` ويُدار من صفحة الإعدادات (`ExchangeRates.tsx`).
+
+9. **Treasury: LYD-Only + Dollar-to-LYD Conversion (خزائن LYD فقط + تحويل الدولار)**
+   - كل الخزائن بالدينار الليبي (LYD) فقط — لا خزائن بالدولار
+   - 2 خزينة لكل فرع عند الإنشاء: واحدة نقدية (`cash`) + واحدة مصرفية (`bank`)
+   - المعاملات بالدولار (مثل سند قبض بعملة USD) تُحوَّل للدينار الليبي عبر سعر الصرف (`exchangeRate`) عند إنشاء السند
+   - `branchId` مُضاف إلى `Treasury` و `BankReconciliation` — عزل فرع كامل
+   -_seed ينشئ الخزائن مع `findFirst`/`skip` (idempotent) عند إنشاء الفرع
+   - حسابات الخزينة: `1103` الخزينة (asset) + `1104` البنوك (asset) — حسابات أصول عالمية مشتركة
+
+10. **Damaged Stock (المخزون التالف) — خيار التخزين والمحاسبة**
+   - `Stock.quantity` و `Item.currentStock` = **الإجمالي الفعلي** (صالح + تالف)؛ `damagedStock` = التالف فقط؛ **الصالح = الإجمالي − التالف**
+   - تسجيل التالف: `POST /api/items/:id/damaged` (`{warehouseId, quantity, notes}`) يرفع `damagedStock` (مخزن + صنف) **دون تغيير الإجمالي** ويسجل حركة `MOVEMENT_TYPES.DAMAGED`
+   - **متوسط التكلفة بطريقة الامتصاص** `absorbedAverageCost(total, damaged, cost, newQty, newCost)`: قيمة المخزون الكامل (بما فيه التالف) تُوزّع على الصالح + الجديد فقط — تُحمَّل تكلفة التالف على الوحدات الصالحة عند الشراء القادم. متناسقة رياضياً مع `weightedAverage` عند `damagedStock = 0`
+   - التحقق من الصالح في: `saleService` (منع بيع التالف)، `transferService` (لا يُنقل التالف)، `minStock` (items + التقارير)
+   - قيمة التالف تبقى ضمن المخزون حتى تمتصها الوحدات الصالحة عمداً (لا شطب مباشر)
+   - **امتداد متقدم (2026-08-19)**: امتصاص فوري عند كل تبديل (تسجيل تالف/مرتجع كتالف/عكس/ترحيل جرد) عبر `costPrice = قيمة المخزون ÷ الصالح`؛ جرد بحقلين؛ عكس التالف؛ مرتجع كتالف في المبيعات؛ تقارير تعزل التالف
+
+11. **Branch-Level Isolation (عزل الفروع — نموذج أمني معتمد)** — راجع `SECURITY.md` للتفاصيل الكاملة
+   - **مبدأ العزل**: العزل على مستوى **(User + Branch)** في الكاش المحلي (IndexedDB) بمفتاح مركب: `table:${table}:user:${userId}:branch:${branchId}` — لا مسح الكاش عند تبديل المستخدم (يحافظ على العمل أوفلاين)، بل عزل منطقي لأسماء الفضاء
+   - **آلية المزامنة**: طابور `syncQueue` يحتوي على `userId` و `branchId` لكل عملية، والسيرفر **يتحقق منهما** قبل التنفيذ — **لا يُثق أبداً بالبيانات المرسَلة من العميل** (تُستبدل الهوية من التوكن)
+   - **التحقق من الموارد (Resource Ownership)**: في `saleService` و `purchaseService` و `inventoryService` يُتحقق أن `warehouseId` و `partyId` (المُقيدة بفرع) تتبع `branchId` الخاص بالمستخدم من التوكن؛ عند التخالف يُرفض الطلب **ويُسجَّل حدث أمني**
+   - **سياسة الاحتفاظ بالكاش**: إبقاء **آخر 3 مستخدمين** فقط في IndexedDB (توازن أداء/حجم) مع إمكانية تكوين العدد (`MAX_CACHED_USERS`)
+   - **الأحداث الأمنية (Security Events)**: تسجيل محاولات الوصول غير المصرح بها في جدول `AuditLog` مع نوع الحدث (`BRANCH_ACCESS_DENIED`, `IDENTITY_TAMPERING`) وعرضها في واجهة `AuditLogs.tsx` مع فلتر مخصص (`eventType`)
+   - **حالة التنفيذ**: **منفَّذ في الكود** — Namespacing كامل (User+Branch) في IndexedDB (`client/src/lib/session.ts` + `offline.ts` + `SyncContext`)، طابور `syncQueue` يحمل `userId`/`branchId` ويُتحقق منها **من التوكن** في `syncService.pushChanges` (رفض + تسجيل `IDENTITY_TAMPERING`/`BRANCH_ACCESS_DENIED`)، عمود `event_type` في `audit_logs` + فلتر مخصص في `AuditLogs.tsx`، تنظيف دوري `pruneOldUserCaches` بآخر 3 مستخدمين — التفاصيل في قسم «🔐 نموذج الأمن والعزل» أدناه + [`SECURITY.md`](./SECURITY.md) — **عزل القراءات (GET) منفَّذ**: helper `resolveBranchScope(req)` في `middleware/auth.ts` يُجبر المستخدم المربوط بفرع على فرعه في `GET /warehouses` و`GET /sales` و`GET /purchases` و`GET /inventory/counts` و`GET /treasury` و`GET /treasury/receipts` و**كل مسارات `/reports/*`** (سوبر أدمن/مستخدم عالمي = الكل أو حسب `?branchId`) — **الخزائن/Sync مفلترة بالفرع**: `cachedRead('treasuries:list:${branchId}', ...)` في ReportsHub + Receipts + LocalPurchaseInvoice + Treasuries — المتبقي 🟡: التقارير الموحّدة `canViewAllBranches` (واجهة التضمين عبر الصفحات)
+
+---
+
+## 📋 خطة المراحل المتبقية (Roadmap)
+
+> **📋 المرجع التفصيلي القابل للتحديث**: [`PROJECT_TODO.md`](./PROJECT_TODO.md) — Master Todo للمراحل 8-11 (مهام/واجهات/مسارات API/حالات ⬜🔄✅) — يُحدَّث مع كل تقدم.
+
+| المرحلة | المهام | الأولوية |
+|----------|--------|----------|
+| **1. DB & Smoke Test** | ✅ **مكتمل** — 41 جدول، server يعمل على 3005، setup/login/dashboard اختُبرت | عالي |
+| **2. Frontend Core** | ✅ **مكتمل** — Vite 5 + React 18 + TS + Tailwind 3.4، PWA (manifest + SW)، API client، IndexedDB wrapper، AuthContext، Layout RTL، Login/Setup/Dashboard | عالي |
+| **3. Offline Engine** | ✅ **مكتمل** — SyncContext (كشف اتصال online/offline)، offlineWrite (طابور عند غياب الاتصال)، cachedRead (Cache-First)، مزامنة تلقائية عند العودة للاتصال، مودال تعارضات (إعادة/تجاهل) | عالي |
+| **4. Pages — Catalog** | ✅ **مكتمل** — Items (CRUD + خصائص + باركود + فلترة، Offline-First)، Parties (CRUD)، إعدادات الكتالوج (فئات/ماركات/وحدات/خصائص) | عالي |
+| **5. Pages — Sales** | ✅ **مكتمل** — POS-like فاتورة بيع (غير touch)، عروض أسعار، Serial Picker، طباعة/Email/WhatsApp، تحويل عرض لفواتير | عالي |
+| **6. Pages — Purchase** | ✅ **مكتمل** | **Triple-Track Purchase System**: فاتورة محلية مبسّطة (تسعير مزدوج يدوي، لا تكاليف وصول) + أوامر استيراد مع Landed Cost كامل (حقول متقدمة مخفية) + استلام + سيريالات + صفحة موحدة بتبويبات + طباعة/مشاركة | عالي |
+| **7. Pages — Inventory** | ✅ **مكتمل** — تحويلات (إنشاء/اعتماد/إلغاء/استلام + سيريالات) + جرد (Counts: إنشاء بحرق CNT + إدخال كميات + حفظ جماعي + ترحيل) + حركات (Movements) + تقييم (Stock Valuation) + مخزون منخفض (Low Stock) — محور تبويبات `InventoryHub` | متوسط |
+| **8. Pages — Accounting** | ✅ **مكتمل** — `JournalEntries.tsx` + `TrialBalance.tsx` + `IncomeStatement.tsx` + `BalanceSheet.tsx` + `ChartOfAccounts.tsx` + `AccountLedger.tsx` + `PartyLedger.tsx` + `AccountingHub.tsx` | متوسط |
+| **9. Pages — Treasury** | ✅ **مكتمل (9.1-9.7)** — `Treasuries.tsx` + `Receipts.tsx` + `BankReconciliation.tsx` + `TreasuryHub.tsx` | متوسط |
+| **10. Pages — Settings** | ✅ **مكتمل** — `CompanySettings.tsx` + `UsersSettings.tsx` + `BranchesWarehouses.tsx` + `ExchangeRates.tsx` + `AuditLogs.tsx` + `SettingsHub.tsx` | متوسط |
+| **11. Polish & Deploy** | ✅ **مكتمل** — 11.1 ✅ (Unit Tests 44) + 11.2 ✅ (Integration على MySQL اختباري) + 11.3 ✅ (E2E Playwright) + 11.4 ✅ (Docker جاهز، لم يُجرَّب) + 11.5 ✅ (CI/CD) + 11.6 ✅ (Monitoring) + 11.7 ✅ (Backup) + 11.8 ✅ (Prod/SSL) + 11.9 ✅ (Security) | منخفض |
+
+---
+
+## 🛡️ قواعد التطوير (Development Constitution)
+
+| القاعدة | الوصف |
+|----------|-------|
+| **TypeScript Strict** | `strict: true`، لا `any` صريح، الأنواع من Prisma |
+| **Single Source of Truth** | Schema Prisma → Types → Services → Routes → Client |
+| **No Direct DB in Routes** | كل منطق في `services/`، Routes = HTTP فقط |
+| **Transaction Boundary** | كل عملية كتابة متعددة الجداول في `prisma.$transaction` |
+| **Audit Trail** | middleware `audit` يسجل كل تغيير (من، متى، قبل/بعد) |
+| **Error Handling** | `errorHandler` middleware واحد، أكواد موحدة، لا stack في prod |
+| **Validation** | `express-validator` في routes، types مشتركة مع client |
+| **Naming** | camelCase للـ TS، snake_case للـ DB (`@map`)، PascalCase للمكونات React |
+| **Git** | Commits صغيرة، رسائل واضحة، `main` محمية، PR مطلوب |
+| **Secrets** | `.env` محلي فقط، `.env.example` في repo، لا committed secrets |
+
+---
+
+## 🔄 آلية تحديث هذا الملف (Self-Update Protocol)
+
+**هذا الملف حيوي ويجب تحديثه تلقائياً عند:**
+- إضافة/إزالة خدمة أو مسار رئيسي
+- تغيير قرار معماري (DB، Auth، Offline strategy)
+- إكمال مرحلة رئيسية (تحديث جدول Roadmap)
+- اكتشاف نمط جديد يستحق التوثيق (مثل Decimal pattern)
+
+**كيفية التحديث:**
+1. أي agent يعمل على الكود يحدّث القسم المقابل في هذا الملف في نفس الـ commit
+2. قسم "ما تم إنجازه" و"Roadmap" يعكسان الواقع الحالي بدقة
+3. القرارات غير القابلة للتراجع (Immutable) لا تُعدل إلا بإجماع الفريق وتوثيق السبب
+
+**أمر التحقق السريع:**
+```bash
+# في server/
+npx tsc --noEmit   # يجب أن يمر نظيفاً
+```
+
+---
+
+## 📌 نقاط دخول سريعة للـ Agents الجدد
+
+| المهمة | الملفات المفتاحية |
+|---------|------------------|
+| فهم ERD | `server/prisma/schema.prisma` |
+| إضافة خدمة جديدة | `server/src/services/*.ts` + تسجيل في `app.ts` |
+| إضافة endpoint | `server/src/routes/*.ts` + import في `app.ts` |
+| منطق محاسبي | `server/src/services/accountingService.ts` |
+| منطق مخزون/سيريال | `server/src/services/inventoryService.ts` |
+| بيع/ضمان | `server/src/services/saleService.ts` |
+| شراء/استيراد | `server/src/services/purchaseService.ts` |
+| أنواع مشتركة | `shared/constants.ts`، `shared/utils.ts` |
+| إعداد أولي | `server/src/services/authService.ts` → `setup()` |
+| مزامنة | `server/src/services/syncService.ts` |
+
+---
+
+## 🏁 حالة المشروع الحالية (Live Status)
+
+- **Backend**: ✅ **100% TypeScript Clean** — صفر أخطاء، build ناجح
+- **Database Schema**: ✅ **مكتمل** — migrations `init` + `add_journal_currency_and_sequences` (جدول `sequences` + عملة القيد) + `add_bank_reconciliation` + `add_super_admin_flag` (is_super_admin/super_admin_key، سوبر أدمن واحد للشركة) + `add_damaged_stock` + `add_advanced_damaged_flow` + `add_updated_at_branch_warehouse` (`updated_at` لـ `branches`/`warehouses` لمزامنة التعديلات) مطبقة
+- **DB & Smoke Test**: ✅ **مكتمل** — MySQL (MariaDB XAMPP) متصل، `setup` + `login` + `dashboard` اختُبرت بنجاح
+- **Backend Port**: 🔥 **3005** (كان 3000 — مشغول بمشروع LYALINA؛ 3005 ثابت الآن في `.env` و `.env.example`)
+- **Frontend Dev Port**: 🔥 **5175** (كان 5173 — مشغول بمشروع آخر؛ 5175 ثابت الآن في `vite.config.ts` و `.env` و `.env.example`)
+- **ملاحظة مهمة**: `dotenv.config()` أُضيف إلى `server/src/config/index.ts` — بدونها لا تُقرأ قيم `.env`
+- **Frontend Core**: ✅ **مكتمل** — Vite + React + TS + Tailwind + PWA + IndexedDB + Auth + Layout + Login/Setup/Dashboard، build نظيف
+- **Offline Engine**: ✅ **مكتمل** — `SyncContext` (online/offline) + `offlineWrite` (طابور) + `cachedRead` (Cache-First) + مزامنة تلقائية + Conflict UI (إعادة/تجاهل)؛ أخطاء الدفع الآن **structured** `{entity, id, message}` من `syncService.pushChanges`
+- **Pages — Catalog**: ✅ **مكتمل** — `Items.tsx` (CRUD + خصائص + باركود + بحث/فلترة + مخزون منخفض + Pagination + توليد كود تلقائي ITM، Offline-First عبر `offlineWrite`/`cachedRead`)، `Parties.tsx` (CRUD + Pagination + توليد كود تلقائي PTY)، `CatalogSettings.tsx` (فئات/ماركات/وحدات/خصائص)
+- **Pages — Sales**: ✅ **مكتمل** — `Sales.tsx` (شاشة بيع POS-like: بحث/باركود + سلة فواتير + إجماليات + ضريبة/خصم + مبلغ مدفوع + Serial Picker + آخر الفواتير + Pagination + طباعة/واتساب/بريد، Offline-First)، `Quotes.tsx` (عروض أسعار + Pagination + تحويل لفواتير)، `SerialPicker.tsx`، `lib/print.ts`
+- **Pages — Purchase**: ✅ **مكتمل** — **Triple-Track Purchase System**: `Purchases.tsx` (صفحة موحدة: تبويبات الكل/استيراد/محلي/داخلي بعدادات + 6 فلاتر + Pagination + جدول موحد + مودال تفاصيل لكل نوع)، `LocalPurchaseInvoice.tsx` (فاتورة محلية: LYD افتراضي، تسعير مزدوج يدوي `$` + `د.ل`، إجمالي فعلي بالدينار + مرجعي بالدولار)، `ImportOrderCreate.tsx` (أمر استيراد USD + حقلَ LC وتكاليف الوصول في "خيارات متقدمة" ⚙️)، `ImportOrderReceive.tsx` (استلام + تكاليف وصول قابلة للطي + سيريالات) — الـ Backend: `GET /purchases` الموحد (فلاتر `type/page/limit/from/to/partyId/warehouseId/status`) يحل محل 3 مسارات قديمة (حُذف `/purchases/orders/list`)، ومسارات الواجهة القديمة (`/purchases/direct`، `/purchases/orders`، `/purchases/orders/:id/receive`) استُبدلت بـ `/purchases/local`، `/purchases/import`، `/purchases/import/:id/receive`
+- **سعر الصرف الافتراضي**: 🔢 يُدار من **صفحة الإعدادات** (`ExchangeRates.tsx`) — نموذجا الشراء (LocalPurchaseInvoice + ImportOrderCreate) يقرآن السعر الحي من `/exchange/rate/USD/LYD` عند فتح النموذج، مع احتياطي `DEFAULT_EXCHANGE_RATE_USD_LYD`
+- **SequenceService (Row-level Lock)**: ✅ **مكتمل** — `sequenceService.next()` بـ `SELECT ... FOR UPDATE` (متوافق مع MariaDB 10.4)؛ مرتبط الآن بكامل الخدمات والمسارات: `accountingService` (JRN) + `purchaseService` (PO/PINV) + `saleService` (INV/RET/QOT/WRN) + `treasuryService` (RCV/PAY) + مسارات `transfers` (TRN) و `warranty` (WRN/RMA)؛ بذر تلقائي في `authService.setup()` عبر `SEQUENCE_PREFIXES`
+- **Pages — Inventory (Transfers)**: ✅ **مكتمل** — `Transfers.tsx` (قائمة + إنشاء تحويل + اعتماد/إلغاء + تفاصيل)، `TransferReceive.tsx` (استلام جزئي + SerialPicker من المخزن المصدر)، و `transferService.ts` في الـ backend (إنشاء/اعتماد/إلغاء/استلام داخل ترانزاكشن، نقل سيريالات مع SerialMovement، دون تعديل متوسط التكلفة في التحويل الداخلي) + تحقق من انتماء المخازن للشركة
+- **Pages — Inventory (Phase 7)**: ✅ **مكتمل** — **وحدة المخزون كاملة**: `Transfers.tsx` + `TransferReceive.tsx` (تحويلات + سيريالات + Pagination) + `InventoryCounts.tsx` (جرد: إنشاء بحرق `CNT` من SequenceService + إدخال الكميات المعدودة + **حفظ جماعي** + ترحيل عبر `postCount` مع حركات `COUNT_ADJUSTMENT`) + `StockMovements.tsx` (فلاتر فترة/صنف/مخزن + Pagination + ملخص وارد/صادر/صافي) + `StockValuation.tsx` (الكمية × متوسط التكلفة + إجمالي) + `LowStock.tsx` (تحت الحد الأدنى + عجز + روابط شراء/تحويل) — كلها عبر `InventoryHub.tsx` بمحور تبويبات (تحويلات/جرد/حركات/تقييم/مخزون منخفض)، Offline-First عبر `cachedRead`/`offlineWrite`؛ الـ Backend: `createCount` في `inventoryService.ts` (SequenceService + بذر أصناف داخل ترانزاكشن)، `CNT` أُضيف لـ `SEQUENCE_PREFIXES`، وتنظيف `require` في `reports.ts`
+- **Pages — Accounting (Phase 8.1-8.10)**: ✅ **مكتمل** — **دفتر اليومية**: `JournalEntries.tsx` (قائمة قيود بفلاتر فترة/نوع + ترقيم صفحات (limit 20) عبر `GET /api/journal` (cachedRead)، تفاصيل عبر `GET /api/journal/:id`، **عكس** عبر `POST /api/journal/:id/reverse` مع تأكيد، **إنشاء يدوي** عبر Modal بتحقق صارم من التوازن (مدين = دائن ±0.001) والكتابة عبر `offlineWrite('/journal', 'POST', ...)`). **ميزان المراجعة**: `TrialBalance.tsx` (حتى تاريخ `asOf` عبر `GET /api/journal/reports/trial-balance` — أعمدة كود/اسم/نوع/مدين/دائن، يعرض الأرصدة غير الصفرية فقط + صف إجماليات + شارة متوازن ✓). **قائمة الدخل**: `IncomeStatement.tsx` (فترة من/إلى عبر `GET /api/journal/reports/income-statement` — قسمان إيرادات/مصروفات + إجماليات + صافي ربح بلون حسب الإشارة). **الميزانية العمومية**: `BalanceSheet.tsx` (حتى تاريخ `asOf` عبر `GET /api/journal/reports/balance-sheet` — ثلاث بطاقات أصول/خصوم/حقوق ملكية + إجمالي كل قسم + صف ختامي "الخصوم + حقوق الملكية" مقابل الأصول + شارة ✓/⚠️ حسب `balanced`). **دليل الحسابات**: `ChartOfAccounts.tsx` (شجرة حسابات عبر `GET /api/accounts` + إنشاء/تعديل عبر Modal مع `offlineWrite` بكيان `account` + معالجة **409** "كود الحساب مكرر" + منع الحساب أن يكون أباً لنفسه + رصيد افتتاحي عند الإنشاء + رابط 📓 لكل صف). **دفتر أستاذ حساب**: `AccountLedger.tsx` (مساران `/accounting/accounts/:id/ledger` + `/accounting/ledger` عبر `GET /api/accounts/:id/ledger` — رصيد افتتاحي/ختامي + إجماليات + رصيد تراكمي لكل حركة + طباعة). **كشف حساب طرف**: `PartyLedger.tsx` (`/accounting/party-ledger` عبر `GET /api/accounts/party/:partyId/ledger` + اختيار عميل/مورد من `GET /api/parties`). **المحور**: `AccountingHub.tsx` (لوحة بطاقات روابط على `/accounting` لصفحات المحاسبة السبعة مع `AccountingTabs`). **الكل**: Offline-First عبر `cachedRead` + طباعة عبر `printDocument` (تصدير جديد في `lib/print.ts`). **مشترك**: `lib/accounting.ts` (ACCOUNT_TYPE_LABEL + JOURNAL_TYPE_LABEL) و`AccountingTabs.tsx` (تبويبات NavLink)؛ مسارات `/accounting`, `/accounting/journal`, `/accounting/trial-balance`, `/accounting/income-statement`, `/accounting/balance-sheet`, `/accounting/accounts`, `/accounting/ledger`, `/accounting/accounts/:id/ledger`, `/accounting/party-ledger` في `App.tsx`. **إضافة Backend (من 8.3)**: `syncService.applyChange` يعيد توجيه `journalEntry` create إلى `accountingService.createJournalEntry` (ترقيم JRN + توازن داخل ترانزاكشن) لتعمل القيود المؤجلة دون اتصال
+- **Pages — Treasury (Phase 9.1-9.7)**: ✅ **مكتمل** — **الخزائن LYD فقط** — `Treasuries.tsx`/`Receipts.tsx` مع فلتر فرع `?branchId=` — 2 خزينة لكل فرع (cash + bank) عبر seed — `branchId` على `Treasury` + `BankReconciliation` — `resolveBranchScope` في `GET /treasury` و`GET /treasury/receipts` + تحقق ملكية الفرع — `LocalPurchaseInvoice.tsx` فلتر `treasuries` بالفرع — migration `20260823140000_add_branch_to_treasury_reconciliation` — **58 ✅ + 3 ✅** — مكتمل **التسوية البنكية (9.7)**: `BankReconciliation.tsx` — اختيار خزينة بنكية + فترة عبر `GET /api/treasury/reconciliations/:treasuryId/transactions?from=&to=` (رصيد افتتاحي + سندات الفترة + رصيد تراكمي + رصيد نظام ختامي) + **إنشاء تسوية** عبر `offlineWrite('/treasury/reconciliations','POST')` (رصيد كشف البنك + مطابقة ✓ + رصيد النظام + الفرق + ملاحظات) + **قائمة/تفاصيل** (`GET /api/treasury/reconciliations` و`/:id`) + **إغلاق** (`POST /api/treasury/reconciliations/:id/complete`)؛ الحالة `matched` عند فرق < 0.01 وإلا `draft` و`completed` عبر الإغلاق؛ تبويب «التسوية البنكية» في `TreasuryHub.tsx` ومسار `/treasury/reconciliation`. **Backend 9.7**: `reconciliationService.ts` (getBankTransactions/createReconciliation/list/get/complete داخل ترانزاكشن، بادئة `RC` عبر SequenceService، سطور مطابقة مع isMatched) + مسارات `/reconciliations*` في `treasury.ts` + `syncService` (كيان `bankReconciliation` في entityMap + إعادة توجيه create إلى `reconciliationService.createReconciliation`)
+- **Real-time Notifications (Step 3)**: ✅ **مكتمل** — **Server**: `server/src/realtime.ts` — `initRealtime(server)` مع **مصادقة JWT** في `io.use()` (يتحقق من `socket.handshake.auth.token`، يرفض غير الموثق)؛ الانضمام لغرف `company_{companyId}` + `branch_{companyId}_{branchId}` **تلقائي وصامت من التوكن الموثق** (حُذفت أحداث `join/leave` نهائياً — لا تُقبل أي room-id من العميل)؛ `notifyTransfer(transfer, action)` يستقبل كائن التحويل الجاهز (مع `from/toWarehouse.branchId` من الخدمة) **بلا استعلام DB** ويُرسل `transfer:created/approved/received/cancelled/rejected` لغرفة الشركة + غرفتي فرع المصدر والهدف؛ `app.ts` يعيد تصدير `emitSyncEvent` من `realtime.ts` (توافق). **Client**: `socket.io-client@^4.8.3` + proxy `/socket.io` (`ws: true`) في `vite.config.ts` + `client/src/lib/realtime.ts` (اتصال مع `auth.token` فقط — لا room-id من العميل + registry يعيد ربط المعالجات عند إعادة الاتصال + `onRealtimeError` و`REALTIME_TRANSFER_EVENTS`) + `client/src/contexts/RealtimeContext.tsx` (إشعارات آخر 20 مع `dismiss` + تحذير Toast عند فشل مصادقة الاتصال — توكن منتهي — بلا تكرار 10ث) مربوط في `main.tsx` + toasts في `Layout.tsx` (⚠️ عند فشل الجلسة) + refresh تلقائي لقوائم `Transfers.tsx` و `Purchases.tsx`
+- **Deployment Note**: ⚠️ في الإنتاج يجب أن يعكس الـ reverse-proxy مسار `/socket.io` (WebSocket) إلى منفذ الخادم **3005** — الـ client يتصل بنفس الـ origin عبر `io('/')`
+- **Testing**: ✅ **مكتمل (11.1)** — Jest + ts-jest (mocked prisma): **44 اختباراً ناجحاً** عبر `npm test` في server (sequenceService + accountingService + treasuryService.createReceipt + transferService + **cleanupService.resetDatabase** + **backupService.createBackup**). **11.2 Integration** ✅ **مكتمل** — `npm run test:integration` (سكربت `scripts/setup-integration-db.cjs`: DROP/CREATE `psale_ultra_test` + `prisma migrate deploy` ثم `jest --config jest.integration.config.cjs`): `tests/integration/spine.integration.test.ts` (3 اختبارات خضراء على MySQL حقيقي) يغطي **بيع ← قيد محاسبي ← سند قبض** + أرصدة + **التسوية البنكية (9.7)**؛ Supertest على `app` مستورَد بلا استماع (guard `require.main === module` في app.ts)؛ أُضيف `mysql2` كـ devDependency. **11.3 E2E (Playwright)** ✅ **مكتمل** — `@playwright/test` في client + `client/playwright.config.ts` (testDir `e2e/`، workers:1، baseURL 5175، `channel: 'chrome'` — متصفح النظام بدل Chromium لأن cdn.playwright.dev محجوب، بدون تسجيل فيديو لأن ffmpeg غير مثبت، `webServer` يبدأ server 3005 + client 5175 مع `reuseExistingServer:true`). اختبارات `client/e2e/` (`auth.spec.ts` دخول خاطئ/صحيح + `sales.spec.ts` فاتورة بيع نقدية كاملة + طباعة popup + تحقق INV عبر API + `offline.spec.ts` قطع الشبكة عبر `context.setOffline(true)` ثم expect.poll للوصول) — **5/5 ناجحة و10/10 مع `--repeat-each=2`**. إصلاحات حقيقية كشفتها E2E: `getPendingQueue` في `client/src/lib/db.ts` (كان `IDBKeyRange.only(false)` — Boolean ليس مفتاح IDB صالحاً) + `authLimiter` في `server/src/middleware/error.ts` (الحد الأصلي 20/15د يفرز 429 أثناء جولات الاختبار المتكررة → `max` مرن في non-production). التشغيل: `npm run test:e2e` / `test:e2e:headed` / `test:e2e:report` في client. **Seed بيانات تجريبية** — `server/prisma/seed.ts` (`npm run db:seed` في server): شركة «شركة الأفق للكمبيوتر والإلكترونيات» + مستخدم `admin`/`SuperAdmin123!` + دليل حسابات (26) + فرع رئيسي + مخزن مركزي + خزينتان + 6 فئات/6 ماركات/4 وحدات/5 خصائص + 9 أصناف بمخزون وباركود + 3 سيريالات (للصنف trackSerial) + 5 أطراف + سعر صرف اليوم + تتابعات الـ15 بادئة (INV/RET/QOT/PO/PINV/RCV/PAY/TRN/CNT/WRN/RMA/JRN/RC/ITM/PTY). **آمن للتكرار** (findFirst/skip) — تحقّق فعلي: بذر ثم إعادة تشغيل على DB مؤقتة `psale_seed_test` (تم إنشاؤها + `prisma migrate deploy` + DROP لاحقاً) دون تكرار أي سجل (company=1, user=1, item=9, stock=9, party=5, account=26, sequence=15)
+- **Docker (11.4)**: ✅ **ملفات جاهزة** — `server/Dockerfile` (multi-stage + مرحلة migrate) + `client/Dockerfile` (vite build → nginx) + `client/nginx.conf` (وكيل `/api` + `/socket.io` مع WebSocket Upgrade) + `docker-compose.yml` (db/migrate/server/web + volumes) + `.env.example` للـ compose — **لم تُجرَّب بعد** (لا Docker مثبّت محلياً)
+- **CI/CD (11.5)**: ✅ **مكتمل** — `.github/workflows/ci.yml`: job server (npm ci → `tsc --noEmit` → `npm test -- --ci` → build) + job client (npm ci → `tsc --noEmit` → vite build) على Node 20 مع npm cache عند كل push/PR
+- **Monitoring & Logging (11.6)**: ✅ **مكتمل** — `httpLogger` middleware (طريقة/مسار/كود/زمن بالمللي) بمستوى `http` في winston + `/api/health` موسّع (`db: connected` عبر `SELECT 1` + `uptime` + `version` + **503 degraded** عند انقطاع DB) + `process.on('unhandledRejection'/'uncaughtException')` تُسجَّل ولا تُسقط الخادم + `errorHandler` يسجّل عبر logger
+- **Backup Strategy (11.7)**: ✅ **مكتمل** — `scripts/backup.sh` (Linux) + `scripts/backup.ps1` (Windows/XAMPP) يحللان `DATABASE_URL` من `server/.env` وينشئان `mysqldump --single-transaction --routines --triggers | gzip` مع استبقاء `BACKUP_KEEP_DAYS` (7) ونسخ بعيد اختياري + `scripts/restore.sh`/`restore.ps1` (استعادة من `*.sql.gz`). **إصلاحات Windows تم التحقق منها حياً**: الملفان `.ps1` محفوظان بـ **UTF-8 مع BOM** (بدونه يفسد PowerShell 5.1 النصوص العربية ويكسر البارسِر) + **اكتشاف تلقائي لـ mysqldump/mysql** في المسارات الشائعة (`C:\xampp\mysql\bin`، WAMP، Laragon، Program Files) عند غيابها من PATH + الـ regex لـ `DATABASE_URL` يتجاهل علامتي الاقتباس المحيطتين و`?` في الاسم + سجل `backups/backup.log` يُكتب UTF-8 — **اختبار حي**: سكربت النسخ نجح وأنتج `backups/psale_psale_ultra_*.sql.gz`، و`POST /settings/backup-before-reset` يعيد 200 مع `application/gzip`؛ و**restore.ps1** أُصلح: معامل `-DbName` لم يعد يُتجاهل (يُستخدم صراحةً ويقع `server/.env` احتياطاً)، واستُبدل عامل `<` (غير المدعوم في PowerShell) بقراءة المحتوى وتمريره عبر الأنبوب — **تحقق حي**: استرجاع أحدث نسخة إلى قاعدة مؤقتة `psale_ultra_restore_test` أعاد 45 جدولاً + `admin[SA]`/qa_admin/qa_cashier + المخزن المركزي + QAWH + 26 حساباً + التسلسلات عند 0، ثم حُذفت القاعدة المؤقتة (الاسترجاع **CLI/عملياتي** عمداً — الاستعادة داخل تطبيق حي تمسح القاعدة المتصلة، لذا لا تُكشف كواجهة). **جديد — مساعد الاستعادة `scripts/restore-manager.ps1`** (يُشغَّل بمزدوج النقر عبر `scripts/restore-assistant.cmd`): يعرض قائمة النسخ للاختيار + يفحص سلامة gzip/الجداول قبل أي مسح + **ينشئ نسخة أمان تلقائية للقاعدة الحالية** عبر backup.ps1 قبل الاستعادة + يستعيد عبر restore.ps1 + يتحقق من النتائج (جداول/مستخدمون/سوبر أدمن/تسلسلات) + يطلب إيقاف التطبيق على المنفذ 3005 عند الاستعادة على القاعدة الحية (يُلغى تلقائياً مع `-Force` إذا كان يعمل) ويعرض إعادة تشغيله لاحقاً؛ يدعم `-BackupFile`/`-DbName`/`-Force` للاستخدام المباشر — **تم التحقق حياً**: مسار الإلغاء الوقائي (EXIT=1) واستعادة كاملة إلى قاعدة مؤقتة (EXIT=0، 45 جدولاً). **جدولة يومية**: مهمة `PSaleUltraDailyBackup` مسجلة في Windows Task Scheduler (يومياً 02:00، تشغّل `scripts/backup.ps1`، استبقاء 7 أيام داخلياً) — يُنصح بإضافة نسخة بعيدة خارج الجهاز (Google Drive/مزامنة) يدوياً.
+- **Management Scripts**: ✅ **مكتمل** — سكربتات إدارة موحدة لـ Windows وLinux:
+  - **Windows** (`scripts/win/`): `start.ps1` (تشغيل + health check 10ث) + `stop.ps1` (إيقاف) + `restart.ps1` (إعادة تشغيل + health check) + `status.ps1` (حالة PM2 + health check server/client)
+  - **Linux** (`scripts/linux/`): `start.sh` + `stop.sh` + `restart.sh` + `status.sh` — نفس الوظائف مع shebang `#!/usr/bin/env bash`
+  - **واجهة نصية** (`manage.cmd`): قائمة أرقام (1-6) لإدارة سريعة عبر مزدوج نقر
+  - **Health check**: server على `localhost:3005/api/health` (يتحقق `db: connected` + `uptime`) + client على `localhost:5175`
+  - **PM2 commands فقط**: `pm2 start/stop/restart/status` عبر `ecosystem.config.cjs`
+  - **رسائل بالإنجليزية**: ✅/!!/ℹ️ — واضح ومتسق
+  - **التشغيل**: `.scripts\win\start.ps1` (Windows) أو `bash scripts/linux/start.sh` (Linux)
+  - **ملاحظة Linux**: `chmod +x` مطلوب لأول مرة على سكربتات Linux
+- **Production Env & SSL (11.8)**: ✅ **مكتمل** — `server/.env.production` (مثال توليد مفاتيح) + `deploy/Caddyfile` (HTTPS تلقائي Let's Encrypt + HSTS/headers) + `deploy/nginx-ssl.conf` (TLS termination أمام web + `X-Forwarded-Proto`) + `app.set('trust proxy', 1)` في production لسلامة rate-limit و`req.ip`
+- **Security Audit (11.9)**: ✅ **مكتمل — server `npm audit` = 0 vulnerabilities** — حُذف `uuid` و`xlsx` غير المستخدمين في server (أزال ثغرة xlsx Prototype Pollution/ReDoS بلا إصلاح) + ترقية `nodemailer ^9.0.5` (المثبّت سابقاً ^6.9.8 مهاجَم 8 CVEs) + **client: رُقّي `react-router-dom ^7.18.2`** (إصلاح CVE-2025-68470 open redirect + deserializeErrors) + `.gitignore` جذري يمنع رفع `.env`/`backups`/`logs` + helmet + apiLimiter/authLimiter + `trust proxy`. **JWT Rotation** ✅: سكريبت `scripts/rotate-jwt-secrets.ps1` — تدوير أسرار JWT مع سجل تدقيق في `audit_logs` + سجل محلي + `-Restart` اختياري. **مخاطر مقبولة موثقة**: `esbuild ≤0.24.2` (عبر vite 5) — **dev-server فقط** (لا يُشحَن في إنتاج Docker/nginx)؛ الإصلاح يتطلب vite 8 + rolldown/babel-rc (ناشئة/كاسرة) — مؤجل. راجع **الثغرات المقبولة** أدناه.
+
+#### الثغرات المقبولة في Client (vite-plugin-pwa)
+
+| المكتبة | الثغرة / CVE | التبرير | تاريخ الفحص |
+|----------|-------------|---------|------------|
+| `esbuild ≤0.24.2` (عبر `vite 5`) | خصائص TypeScript/JSX مفقودة في dev | تؤثر فقط على **dev-server** (`npm run dev`). في الإنتاج (`NODE_ENV=production`) يتم البناء عبر `vite build` → ملفات ثابتة تُخدم عبر nginx/Docker، لا يعمل dev-server. | 2026-08-17 |
+| `vite-plugin-pwa 0.19.x` → `vite 5.x` | يعتمد على `vite` غير المحدّث بالثغرات | نفس التبرير: المسار المستهدف هو dev-server فقط. نسخة الإنتاج مبنية ومخدومة عبر nginx، مما يعزل الثغرة تماماً. لا توجد ثغرات معروفة في مسار الإنتاج. | 2026-08-17 |
+
+> **ملاحظة**: فحص `npm audit` في client يظهر 3 ثغرات (2 moderate, 1 high) — جميعها مرتبطة بـ `vite-plugin-pwa` → `vite` → `esbuild`. الإصلاح يتطلب ترقية `vite-plugin-pwa` إلى v0.22+ (يتطلب vite 8، ناشئ/كاسرة). مؤجل حتى استقرار vite 8.
+
+> **التحديث الأخير**: 2026-08-24 — **تحسينات المبيعات/المشتريات/الخزائن/العملاء — المراحل الخمس مكتملة** ✅:
+> **المرحلة 1 (Sales.tsx)** ✅: `payType` ثلاثي (cash/credit/banking) + `bankingService` + select 7 خدمات مصرفية + فلترة يوم الفواتير + 3 أعمدة (كاش/آجل/صكوك+مصرفي) + توجيه تلقائي للخزينة (cash→خزينة كاش، banking→خزينة مصرف، credit→لا خزينة)
+> **المرحلة 2 (LocalPurchaseInvoice.tsx)** ✅: نفس تعديلات المبيعات — `payType` + `bankingService` + فلترة يوم + 3 أعمدة + توجيه خزينة
+> **المرحلة 3 (Receipts.tsx)** ✅: إصلاح `.catch(() => {})` → `.catch((err) => setError(extractError(err)))` + `parties` parsing + `branchId` في params
+> **المرحلة 4 (PartyProfile.tsx)** ✅: مودال بروفايل الطرف مع إحصائيات + جداول فواتير البيع/الشراء + سندات القبض/صرف + الديون حسب طريقة الدفع — مُربط بـ `Parties.tsx` عبر زر "👁️" + state `profilePartyId`
+> **المرحلة 5 (PartyLedger.tsx)** ✅: إصلاح `parties` response `.get('/parties?limit=99999')` + `.parties` field + `.catch()` error display مع `extractError`
+> تحقق: `tsc` نظيف + `npm test` 58 ✅ + `vite build` ✅ + `pm2 restart` ✅
+
+> **التحديث السابق**: 2026-08-23 — **هيكل الخزائن بالفرع + إصلاح tsc purchaseService** ✅: **1)** `purchaseService.ts:288` — إصلاح `branchId` غير المُعرَّف في `receivePurchaseOrder` → `po.branchId` (من أمر الشراء المُستلم). **2)** خزائن LYD فقط: 2 لكل فرع (cash + bank) — `branchId` مُضاف إلى `Treasury` + `BankReconciliation` في schema مع migration + `updatedAt` لـ `Treasury` (لمزامنة التعديلات). **3)** `treasury.ts` مع `resolveBranchScope` في GET + تحقق ملكية الفرع في receipts/reconciliations. **4)** `Treasuries.tsx`/`Receipts.tsx`/`LocalPurchaseInvoice.tsx` — فلتر فرع `useBranchFilter` مع `branchId` في cache keys و `offlineWrite`. **5)** `seed.ts` ينشئ 2 خزينة لكل فرع (idempotent). تحقق: `tsc --noEmit` نظيف (server+client) + `npm test` **58 ✅** + `vite build` ناجح + `pm2 restart psale-server` online. ✅: **B** — `GET /inventory/counts/:id` + `inventoryService.getCountById` (إصلاح 404 في `openCount`؛ يعيد المخزن+الفرع+`creator`/`poster`/`parentCount`+البنود). **C** — migration `20260820000000_add_inventory_count_corrective`: `inventory_counts.parent_count_id` (self-relation «CountCorrective» + index) + FK جديدان `created_by`/`posted_by` إلى `users` (علاقات `CountCreator`/`CountPoster` على `User`). **D** — `POST /inventory/counts/:id/corrective` (admin/manager) + `createCorrectiveCount`: من جرد **posted فقط**، إنشاء من **الرصيد الحي**، `countDate` = الآن، `notes` = «تصحيحي لـ #CNT-…»، بذر بنود من الرصيد الحالي، و**تحقق ملكية الفرع** للمستخدم المربوط بفرع (رفض إن لم يملك الجرد الأصلي). **E** — `InventoryCounts.tsx`: عمود «منفذ الجرد» (`poster?.fullName ?? creator?.fullName`) + زر «🔄 جرد تصحيحي» للجردات المرحّلة + صف فرعي لعرضي (↳ + تلوين كهرماني) + شارة «↳ جرد تصحيحي لـ #CNT-…» وسطر منشئ/منفذ في التفاصيل. تحقق: `tsc --noEmit` نظيف (server+client) + `vite build` ناجح + `npm test` **58 ✅** + `test:integration` **3 ✅** (ضمت الهجرة الجديدة) + **live smoke** (إنشاء CNT-000005 ← ترحيل ← تصحيحي CNT-000006 بـ `parentCountId=5` + GET التفاصيل يعيد `parentCount`/`creator` + منع تصحيحي من تصحيحي → 400).
+> **التحديث السابق**: 2026-08-20 — **عزل الفروع — المرحلة A (الواجهة + القراءات) مكتملة تنفيذاً** ✅: **Client** — إنشاء `BranchFilterContext.tsx` (`canFilter` للسوبر أدمن فقط، `branches` من `/warehouses/branches`، `selectedBranchId` = فرع المستخدم لغيره) + `BranchFilterSelect.tsx` (Select في الهيدر) + ربطه في `main.tsx`/`Layout.tsx`. ربط `branchId` (مفتاح كاش + `?branchId=`) في: `Sales.tsx` (مخازن/فواتير + auto-select أول مخزن + إصلاح كتلة مكررة) + `Purchases.tsx` + `InventoryCounts.tsx` (+ reset `warehouseId` عند تغيير الفرع) + `Dashboard.tsx` + **كل تبويبات `ReportsHub.tsx`** (sales/profit/treasury/serials/warranties/movements/lowstock/valuation/dashboard — جميعها تدرج `branchId` في `cachedRead` و deps) + صفحات وحدة المخزون المستقلة `StockMovements.tsx`/`StockValuation.tsx`/`LowStock.tsx` (تقارير + مخازن مفلترة). **Server** — helper جديـد **`resolveBranchScope(req)`** في `middleware/auth.ts`: سوبر أدمن/مستخدم عالمي (بلا فرع) → `?branchId` أو الكل، **مستخدم مربوط بفرع → يُجبر على فرعه** (منع تجاوز العزل بتزوير المعامل). طُبّق في `GET /warehouses` و`GET /sales` و`GET /purchases` (مع **دمج `warehouseId` و`branchId`** في OR للتحويلات الداخلية بدل الاستبدال) و`GET /inventory/counts` و**كل مسارات `/reports/*`** (dashboard/sales/stock-movements/low-stock/treasury/serials/warranties/profit/stock-valuation)؛ تواقيع: `getStockValuation(companyId, warehouseId?, branchId?)` + `warrantyReport(companyId, status?, branchId?)`. تحقق: `tsc --noEmit` نظيف (server+client) + `vite build` ناجح.
+> **التحديث السابق**: 2026-08-19 — **إدارة الفروع والمخازن الكاملة (تعديل + حذف + ربط)** ✅: مسارات جديدة في `warehouses.ts` — `PUT /warehouses/branches/:id` (تعديل فرع) + `DELETE /warehouses/branches/:id` (حذف فعلي يُمنع إن وُجد مستخدمون/فواتير ويُفك ربط المخازن أولاً) + `PUT /warehouses/:id` (تعديل مخزن + إعادة ربط/فك ربط بفرع آخر مع التحقق من انتماء الفرع للشركة + منع كود مكرر 409) + `DELETE /warehouses/:id` (حذف فعلي يُمنع إن وُجد مخزون/سيريالات/حركات/تحويلات/فواتير/جرد مرتبطة). **مزامنة**: migration `20260819200000_add_updated_at_branch_warehouse` يضيف `updated_at` لـ `branches`/`warehouses` (backfill = created_at) + `syncService` يسحب branch/warehouse عبر `updatedAt` بدل `createdAt` لتنعكس التعديلات بين الأجهزة. **الواجهة** `BranchesWarehouses.tsx`: أزرار تعديل/حذف على كل فرع ومخزن + إعادة ربط المخزن بفرع آخر في نفس المودال + توحيد `WAREHOUSE_TYPES` على قيم المخطط (`regular`/`central`/`damaged`/`returned`/`display` — كانت `broken`/`returns`). تحقق: `tsc --noEmit` نظيف (server+client) + `vite build` ناجح + `npm test` **58 ✅** + `test:integration` **3 ✅** + **live smoke** (تعديل مخزن/ربط/فك ربط + حذف مخزن + حذف فرع صامت + قيد 400 على الفرع الرئيسي).
+> **التحديث السابق**: 2026-08-19 — **حزمة المخزون التالف المتقدمة** ✅: جرد بحقلين (`countedGoodQty`/`countedDamagedQty` في `InventoryCountItem` — migration `20260819100000_add_advanced_damaged_flow`) + 4 حركات جديدة (`return_damaged`, `damage_reversal`, `inventory_adjustment_good`, `inventory_adjustment_damaged`) + **امتصاص التكلفة فورياً** (`costPrice = قيمة المخزون ÷ الصالح`) عند كل تسجيل تالف/مرتجع كتالف/ترحيل جرد/عكس + `reverseDamaged` + مسار `POST /items/:id/damaged-reverse` + `postCount` يعتمد **الرصيد الحي لحظة الترحيل** ويفرّق صالحاً/تالفاً بحركتين + `stockMovementReport` يعزل عمود `damaged` (net للصالح فقط) + مرتجع كتالف في Sales (تبويب مرتجع + checkbox «كـ تالف» لكل سطر) + **تحسينات سرعة الجرد**: حقل مسح باركود Auto-focus يحدد الصف وينقل المؤشر للكمية + زر «استيراد الجرد» CSV/Excel (papaparse) + بنية جاهزة للجوال + زر «↩ عكس» في حركات المخزون. تحقق: `tsc --noEmit` نظيف (server+client) + `vite build` ناجح + `npm test` **58 ✅** (أُضيف 5: reverseDamaged + postCount ثنائي) + `test:integration` 3 ✅ + **live smoke** (تسجيل تالف 0→1 ثم عكسه 1→0 عبر API مع ظهور حركتي `damaged`/`damage_reversal`).
+> **التحديث السابق**: 2026-08-18 — **المخزون التالف + متوسط تكلفة الامتصاص** ✅: حقل `damagedStock` (Item + Stock) + حركة `damaged` + مسار `POST /items/:id/damaged` (لن يسمح بتجاوز الصالح → 400) + دالة `absorbedAverageCost` بديل `weightedAverage` في الشراء (توزّع قيمة الإجمالي بما فيه التالف على الصالح + الجديد) + منع بيع/تحويل التالف + فلتر مخزن وزر "إخفاء غير المتوفر" وعمود "تفعيل" isActive في Items + تصفية isActive في Sales. تحقق: `tsc --noEmit` نظيف (server+client) + `vite build` ناجح + `npm test` **53 ✅** (أُضيف 9) + `test:integration` 3 ✅.
+> **التحديث السابق**: 2026-08-18 — **تحسينات ما بعد الإطلاق** ✅: 1. **أكواد تلقائية** (`ITM-XXXXXX`/`PTY-XXXXXX`) عبر SequenceService — حقل الكود للقراءة فقط في الواجهة، 1327 صنف مُحدّث بالصيغة الجديدة. 2. **Pagination موحد** (`Pagination.tsx`) — 25/50/100/200/الكل على 7 صفحات (Items/Parties/Quotes/Purchases/Transfers/StockMovements/Sales). 3. **تحسين التصنيف** — 241 صنف + 41 براند جديد + فئة "فلاشات/بطاقات ذاكرة". 4. **`limit=99999`** — جلب كل البيانات من السيرفر مع Pagination client-side. تحقق: `tsc --noEmit` نظيف + `vite build` ناجح + `npm test` 44 ✅.
+> **التحديث السابق**: 2026-08-17 — **سكربتات إدارة النظام الموحدة (Windows + Linux + manage.cmd)** ✅: إنشاء 9 ملفات في `scripts/win/` و`scripts/linux/` و`manage.cmd` — أوامر مفردة بدون flags، health check server/client، رسائل إنجليزية، PM2 commands فقط. توثيق في AGENTS.md (هيكل المشروع + قسم Management Scripts). **تحقق**: `status.ps1` يعمل ويتحقق من kلا الخدمتين (server online 3005 + client online 5175) ✅. **تحديثات سابقة**: تحسينات أمنية: سكربت تدوير JWT مع سجل تدقيق + توثيق الثغرات المقبولة** ✅: تعديل شامل لـ `scripts/rotate-jwt-secrets.ps1` — **لا إعادة تشغيل تلقائية** (حُذف pm2 restart)؛ مفتاح `-Restart` اختياري مع تحذير إنتاج؛ **تسجيل في قاعدة البيانات** (`audit_logs` جدول، action=`ROTATE_JWT`،قيم مقنعة `****`) عبر mysql CLI + **سجل محلي** في `scripts/logs/jwt-rotation.log`؛ رسائل واضحة للمسؤول. توثيق **الثغرات المقبولة** في AGENTS.md (قسم فرعي تحت 11.9): جدول يوضح أن ثغرات `vite-plugin-pwa`/`esbuild` محصورة في dev-server فقط ولا تُستغل في الإنتاج. **التحقق**: السكربت يعمل بدون `-Restart` (لا إعادة تشغيل PM2 ✓) + سجل audit_logs مسجل ✓ + قيم مقنعة ✓ + local log ✓.
+> **التحديث السابق**: 2026-08-15 — **11.3 E2E (Playwright) + Seed بيانات تجريبية — المرحلة 11 اكتملت بالكامل** ✅: `@playwright/test` في client + `client/playwright.config.ts` (channel `chrome` بدل Chromium المحجوب، بدون فيديو، webServer server 3005 + client 5175 + `reuseExistingServer:true`). اختبارات `client/e2e/` — auth (دخول خاطئ/صحيح) + sales (فاتورة بيع نقدية كاملة + طباعة popup + تحقق INV عبر API) + offline (setOffline ثم مزامنة للـ Backend) — **5/5 ✅ و10/10 مع `--repeat-each=2`**. إصلاحات حقيقية كشفتها: `getPendingQueue` في `client/src/lib/db.ts` (`IDBKeyRange.only(false)` غير صالح → `store.getAll()` + فلترة synced + sort) + `authLimiter` في `server/src/middleware/error.ts` (حد 20/15د → مرن في non-production). **Seed** `server/prisma/seed.ts` (`npm run db:seed`): شركة أفق + `admin`/`SuperAdmin123!` + 26 حساباً + فرع + مخزن مركزي + خزينتان + كتالوج + 9 أصناف + 3 سيريالات + 5 أطراف + سعر صرف + 13 تتابعاً — **آمن للتكرار** (findFirst/skip): بذر + إعادة تشغيل على DB مؤقتة `psale_seed_test` دون تكرار (company=1, user=1, item=9, stock=9, party=5, account=26, sequence=13) ثم DROP للـ DB المؤقتة. **تشغيل**: `npm run test:e2e` / `test:e2e:headed` / `test:e2e:report` (client) + `npm run db:seed` (server). تحقق: `tsc --noEmit` نظيف (server+client) + `npm test` (44 ✅) + `test:integration` (3 ✅) + `test:e2e` (5 ✅).
+> **التحديث السابق**: 2026-08-13 — **تشغيل دائم في الخلفية عبر PM2 (Windows)** ✅ **مكتمل**: `ecosystem.config.cjs` في جذر المشروع (تشغيل موحّد: `psale-server` = `tsx watch src/app.ts` على 3005 + `psale-client` = vite على 5175 — **بدون `pm2 start npm` الذي يفشل على Windows**). تثبيت `pm2` عالمياً + `pm2-windows-startup` (`pm2-startup install` → تسجيل HKCU\...\Run) + `pm2 save`. التحقق: كلاهما `online` مع `↺ 0`، `/api/health` → `db: connected`، العميل HTTP 200، سجلات الأخطاء نظيفة. دليل مفصّل بالعربية: **`installation.txt`** (تثبيت/تشغيل/تحقق/تشغيل تلقائي/أوامر إدارة/استكشاف أخطاء). إلغاء التشغيل التلقائي: `pm2-startup uninstall`.
+> **التحديث السابق**: 2026-08-13 — **Background Sync + تنبيه حصة التخزين + زر التحذير (Offline Polish)** ✅ **مكتمل**: `client/vite.config.ts` — Workbox `backgroundSync` (`psale-queue`, `maxRetentionTime: 86400` دقيقة = 60 يوماً) لكل **POST/PUT/PATCH/DELETE على `/api/*`** (تُعاد تلقائياً عند عودة الإنترنت حتى لو أُغلق المتصفح) + `navigationPreload` + `cleanupOutdatedCaches` + NetworkFirst لـ GET `/api/*` (`api-cache`, مهلة 3ث, انتهاء 200 إدخال/60 يوماً). `client/src/lib/db.ts` — `estimateStorage()` (عبر `navigator.storage.estimate`) لإرجاع `{usage, quota, percent}`. `client/src/contexts/SyncContext.tsx` — حالة `storageLevel` (`ok|warning|critical` عند 70%/90%) + `storagePercent` + `showWarningModal/setShowWarningModal` + مراقبة دورية كل 5 دقائق وبعد كل مزامنة + تسجيل `reg.sync.register('psale-queue')` كطبقة أمان إضافية بجانب طابور IndexedDB اليدوي (يبقى حلاً أساسياً؛ backgroundSync فقط لتعويض إغلاق المتصفح). **جديد** `client/src/components/OfflineWarningBanner.tsx` (شريط علوي ثابت: 🔴 أحمر + 🚨 عند حرج، ⬛ رمادي عند الأوفلاين، 🟠 عند تنبيه) + `client/src/components/WarningModal.tsx` (تعليمات: لا تمسح بيانات الموقع/الكوكيز، ضرورة الإنترنت، شريط نسبة الاستهلاك). `client/src/components/Layout.tsx` — زر «⚠️ تحذير — تعليمات مهمة» بارز **في الشريط الجانبي أسفل أيقونة الاتصال (سطح المكتب)** + **هيدر موبايل علوي `lg:hidden` (مشروع جديد)** يحمل زر «تحذير» + مؤشر اتصال؛ الزر يتوهج أحمر ثابتاً مع 🚨 في الحالة الحرجة ويعرض نسبة الاستهلاك. تحقق: `tsc --noEmit` نظيف + `vite build` ناجح + `sw.js` المتولد يحتوي `BackgroundSyncPlugin("psale-queue",{maxRetentionTime:86400})` و`NavigationRoute` و`api-cache`. **ملاحظة**: Background Sync يتطلب HTTPS + دعم المتصفح (لا يعمل في Safari) — الطابور اليدوي يغطي ذلك.
+> **التحديث السابق**: 2026-08-12 — **منطقة الخطر (Super Admin)** ✅ **مكتمل + تحقق حي شامل**: حقل `isSuperAdmin` + `superAdminKey` في `User` (مigration `20260812000000_add_super_admin_flag`، سوبر أدمن واحد للشركة)؛ `authService.setup` يرقّي المستخدم الأول + `createUser`/`PUT /users/:id` يمنعان سوبر أدمن ثانياً وإزالة الوحيد؛ `cleanupService.resetDatabase` (33 deleteMany + إعادة ضبط sequences/أرصدة الحسابات/الخزائن داخل ترانزاكشن) + `backupService`؛ مسارا `POST /settings/backup-before-reset` (تنزيل مباشر) و`POST /settings/reset-database` (كلمة مرور السوبر أدمن + Rate Limit 1/ساعة)؛ واجهة `DangerZone.tsx` (تبويب 📛 في SettingsHub، مسار `/settings/danger-zone`) + `resetOfflineStorage` + مسح IndexedDB/localStorage عند `?reset=1` في AuthContext. **تحقق حي**: backup → 200 `application/gzip`؛ كلمة مرور خاطئة → 401؛ تفريغ ناجح → 200 مع `deletedTransactions:133`، وبقي `admin[SA]` + الفرع الرئيسي + المخزن المركزي + 26 حساباً + التسلسلات عند 0 — **فُحصت البايتات وهي UTF-8 سليمة** (المشوّش كان عرض طرفية الاختبار فقط). **ملاحظة**: كلمة مرور مستخدم `admin` في dev أُعيد تعيينها إلى `SuperAdmin123!` (لتجربة التفريغ). أدلة QA أُعيد إنشاؤها بعد التفريغ: `qa_admin`/`qa_cashier`/`QAWH`. الاختبارات: **44 وحدة ✅ + 3 تكامل ✅** (أُضيف cleanupService 6 + backupService 5).
+> **التحديث السابق**: 2026-08-11 — **إدارة المستخدمين والصلاحيات التفصيلية + ربط المخازن بالفروع** ✅ **مكتمل**: `shared/constants.ts` أضاف `ROLE_PERMISSION_PRESETS`/`buildRolePermissions` (وصفات الأدوار الخمسة، **`canDelete` للأدمن فقط**، cashier=view/add/print على sales+treasury فقط)؛ `POST /settings/users` جديد (admin فقط، يطبّق صلاحيات الدور عند عدم إرسالها) + تقوية `POST /auth/users` بنفس السلوك + إخفاء `passwordHash` من استجابة `authService.createUser`؛ `GET /warehouses` يدعم فلتر `?branchId=`؛ `BranchesWarehouses.tsx` جعل الفرع **إجبارياً** في نموذج المخزن + فلتر فرع + شارة فرع؛ `UsersSettings.tsx` أضاف زر/مودال «إضافة مستخدم» + تعبئة تلقائية لجدول الصلاحيات عند تغيير الدور. **تحقق E2E حي**: admin → `GET /warehouses?branchId=1` يعيد مخازن الفرع 1 فقط، إنشاء كاشير عبر الـ API → تسجيل دخول → صلاحياته sales/treasury فقط + 403 على `/settings/users` و`POST /warehouses`. تحقق: `tsc --noEmit` نظيف (server + client) + `npm test` (33 ✅) + `npm run test:integration` (3 ✅) + build ناجح. **Artifacts QA في قاعدة الـ dev**: مستخدما `qa_admin`/`qa_cashier` + مخزن `QAWH` (اختباريان — يُحذفان عند الطلب).
+> **التحديث السابق**: 2026-08-10 — **9.7 التسوية البنكية** ✅ **مكتملة (Backend + Frontend)**: موديلا `BankReconciliation`/`BankReconciliationLine` + هجرة `20260810204426_add_bank_reconciliation` (مطبَّقة على dev + test) + `reconciliationService` (RC + مطابقة ✓ + فرق + إغلاق داخل ترانزاكشن) + مسارات `/treasury/reconciliations*` + كيان `bankReconciliation` في `syncService` + `BankReconciliation.tsx` (تبويب + مسار `/treasury/reconciliation`). **11.2 Integration** ✅ **مكتمل** — `npm run test:integration` (**3 ✅** عبر `spine.integration.test.ts` على `psale_ultra_test` MySQL حقيقي: بيع ← قيد ← سند قبض + أرصدة + تسوية بنكية). **المتبقي الوحيد**: **11.3 E2E (Playwright)**. تحقق: `tsc --noEmit` نظيف (server + client) + build ناجح (server + client/PWA) + `npm test` (**33 ✅**) + `npm run test:integration` (**3 ✅**).
