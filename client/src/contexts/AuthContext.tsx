@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api, clearTokens, extractError, isAuthenticated, setTokens } from '@/lib/api'
 import { resetOfflineStorage } from '@/lib/db'
-import { clearActiveScope, setActiveScope } from '@/lib/session'
+import { clearActiveScope, setActiveScope, setActiveScopeSync } from '@/lib/session'
 import type { LoginResponse, User } from '@/types'
 
 interface AuthContextValue {
@@ -20,7 +20,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     try {
       const raw = localStorage.getItem(USER_KEY)
-      return raw ? (JSON.parse(raw) as User) : null
+      if (raw) {
+        const parsed = JSON.parse(raw) as User
+        // تهيئة النطاق نشطة فوراً من الذاكرة قبل رندر الأطفال —
+        // يمنع سباق cachedRead → namespaceKey قبل كتابة IndexedDB (حالة أوفلاين بعد إعادة الفتح)
+        setActiveScopeSync(parsed.id, parsed.branchId ?? null)
+        return parsed
+      }
+      return null
     } catch {
       return null
     }
