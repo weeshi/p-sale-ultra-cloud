@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import DataList, { type DataListColumn } from '@/components/DataList'
 import Modal from '@/components/Modal'
 import Pagination, { DEFAULT_PAGE_SIZE, usePaginate } from '@/components/Pagination'
 import { api, extractError } from '@/lib/api'
@@ -7,6 +8,7 @@ import { cachedRead } from '@/lib/offline'
 import { useBranchFilter } from '@/contexts/BranchFilterContext'
 import { onRealtimeEvent, REALTIME_TRANSFER_EVENTS } from '@/lib/realtime'
 import { fmt, fmtDate, fmtMoney, fmtUsd, toNum } from '@/lib/format'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import type {
   Party,
   PurchaseInvoice,
@@ -122,7 +124,7 @@ export default function Purchases() {
   )
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     return records.filter((r) => {
       if (tab !== 'all' && r.type !== tab) return false
       if (status && r.status !== status) return false
@@ -137,11 +139,8 @@ export default function Purchases() {
       if (dateFrom && new Date(r.date) < new Date(dateFrom + 'T00:00:00')) return false
       if (dateTo && new Date(r.date) > new Date(dateTo + 'T23:59:59')) return false
       if (q) {
-        const haystack = [r.number, r.partyName, r.direction, r.warehouseName, r.notes]
-          .filter(Boolean)
-          .map((s) => String(s).toLowerCase())
-          .join(' ')
-        if (!haystack.includes(q)) return false
+        const haystack = buildSearchHaystack(r.number, r.partyName, r.direction, r.warehouseName, r.notes)
+        if (!searchMatch(haystack, q)) return false
       }
       return true
     })
@@ -151,8 +150,83 @@ export default function Purchases() {
 
   const typeLabel = (t: PurchaseTrack) => TAB_LABEL[t]
 
+  const purchaseColumns: DataListColumn<UnifiedPurchase>[] = [
+    {
+      key: 'type',
+      label: 'النوع',
+      render: (r) => (
+        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+          r.type === 'import' ? 'bg-purple-100 text-purple-700'
+            : r.type === 'local' ? 'bg-emerald-100 text-emerald-700'
+            : 'bg-cyan-100 text-cyan-700'
+        }`}>{typeLabel(r.type)}</span>
+      ),
+    },
+    {
+      key: 'number',
+      label: 'الرقم',
+      render: (r) => <span className="font-mono text-xs">{r.number}</span>,
+    },
+    {
+      key: 'date',
+      label: 'التاريخ',
+      render: (r) => fmtDate(r.date),
+    },
+    {
+      key: 'party',
+      label: 'الطرف',
+      render: (r) => (
+        <div>
+          <div className="text-sm font-medium text-slate-800">
+            {r.type === 'internal' ? r.direction : r.partyName}
+          </div>
+          {r.type === 'internal' && r.partyName && (
+            <div className="text-xs text-slate-500">{r.partyName}</div>
+          )}
+        </div>
+      ),
+      mobileLabel: 'الطرف',
+    },
+    {
+      key: 'warehouse',
+      label: 'المخزن',
+      render: (r) => <span className="text-xs text-slate-600">{r.warehouseName}</span>,
+      mobileHidden: true,
+    },
+    {
+      key: 'total',
+      label: 'الإجمالي',
+      render: (r) => (
+        <span className="font-semibold">
+          {r.currency === 'USD' ? fmtUsd(r.total) : fmtMoney(r.total)}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'الحالة',
+      render: (r) => {
+        const st = statusInfo(r.status)
+        return <span className={`rounded-full px-2 py-0.5 text-xs ${st.style}`}>{st.label}</span>
+      },
+    },
+    {
+      key: 'actions',
+      label: '',
+      render: (r) => (
+        <button
+          onClick={(e) => { e.stopPropagation(); setViewRecord(r) }}
+          className="rounded px-2 py-1 text-xs text-brand-700 hover:bg-brand-50"
+        >
+          عرض
+        </button>
+      ),
+      mobileHidden: true,
+    },
+  ]
+
   return (
-    <div className="p-6">
+    <div className="p-4 lg:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">المشتريات</h1>
@@ -240,73 +314,17 @@ export default function Purchases() {
         />
       </div>
 
-      {/* ===== الجدول ===== */}
+      {/* ===== الجدول / Cards ===== */}
       {loading ? (
         <p className="py-16 text-center text-slate-400">جارٍ تحميل المشتريات...</p>
-      ) : filtered.length === 0 ? (
-        <div className="card py-12 text-center text-slate-400">لا توجد سجلات مطابقة للفلترة</div>
       ) : (
-        <div className="card overflow-x-auto p-0">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>النوع</th>
-                <th>الرقم</th>
-                <th>التاريخ</th>
-                <th>الطرف</th>
-                <th>المخزن</th>
-                <th>الإجمالي</th>
-                <th>الحالة</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginated.map((r) => {
-                const st = statusInfo(r.status)
-                return (
-                  <tr key={r.key}>
-                    <td>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        r.type === 'import'
-                          ? 'bg-purple-100 text-purple-700'
-                          : r.type === 'local'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-cyan-100 text-cyan-700'
-                      }`}>
-                        {typeLabel(r.type)}
-                      </span>
-                    </td>
-                    <td className="font-mono text-xs">{r.number}</td>
-                    <td>{fmtDate(r.date)}</td>
-                    <td>
-                      <div className="text-sm font-medium text-slate-800">
-                        {r.type === 'internal' ? r.direction : r.partyName}
-                      </div>
-                      {r.type === 'internal' && r.partyName && (
-                        <div className="text-xs text-slate-500">{r.partyName}</div>
-                      )}
-                    </td>
-                    <td className="text-xs text-slate-600">{r.warehouseName}</td>
-                    <td className="font-semibold">
-                      {r.currency === 'USD' ? fmtUsd(r.total) : fmtMoney(r.total)}
-                    </td>
-                    <td>
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${st.style}`}>{st.label}</span>
-                    </td>
-                    <td>
-                      <button
-                        onClick={() => setViewRecord(r)}
-                        className="rounded px-2 py-1 text-xs text-brand-700 hover:bg-brand-50"
-                      >
-                        عرض
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataList
+          data={paginated}
+          columns={purchaseColumns}
+          onRowClick={(r) => setViewRecord(r)}
+          emptyText="لا توجد سجلات مطابقة للفلترة"
+          keyFn={(r) => r.key}
+        />
       )}
 
       {!loading && (

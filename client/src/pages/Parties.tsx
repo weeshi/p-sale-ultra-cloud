@@ -5,6 +5,7 @@ import Pagination, { DEFAULT_PAGE_SIZE, usePaginate } from '@/components/Paginat
 import { api, extractError } from '@/lib/api'
 import { cachedRead, offlineWrite } from '@/lib/offline'
 import { fmtMoney, toNum } from '@/lib/format'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import type { PartiesResponse, Party } from '@/types'
 
 interface FormState {
@@ -75,15 +76,12 @@ export default function Parties() {
   }, [loadParties])
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     return parties.filter((p) => {
       if (typeFilter && p.partyType !== typeFilter) return false
       if (q) {
-        const haystack = [p.partyCode, p.partyName, p.mobile, p.phone]
-          .filter(Boolean)
-          .map((s) => String(s).toLowerCase())
-          .join(' ')
-        if (!haystack.includes(q)) return false
+        const haystack = buildSearchHaystack(p.partyCode, p.partyName, p.mobile, p.phone)
+        if (!searchMatch(haystack, q)) return false
       }
       return true
     })

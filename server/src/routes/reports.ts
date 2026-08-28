@@ -38,13 +38,14 @@ router.get('/sales', async (req, res) => {
 // تقرير حركة الأصناف
 router.get('/stock-movements', async (req, res) => {
   try {
-    const { from, to, itemId, warehouseId } = req.query
+    const { from, to, itemId, warehouseId, movementType } = req.query
     const result = await reportService.stockMovementReport({
       companyId: req.companyId!,
       from: from ? new Date(String(from)) : undefined,
       to: to ? new Date(String(to)) : undefined,
       itemId: itemId ? Number(itemId) : undefined,
       warehouseId: warehouseId ? Number(warehouseId) : undefined,
+      movementType: movementType ? String(movementType) : undefined,
       branchId: resolveBranchScope(req),
     })
     return res.json(result)

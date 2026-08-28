@@ -4,6 +4,7 @@ import Modal from '@/components/Modal'
 import { api, extractError } from '@/lib/api'
 import { cachedRead, offlineWrite } from '@/lib/offline'
 import { fmt, fmtDate, fmtUsd, toNum } from '@/lib/format'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import { mailLink, printPurchaseOrder, purchaseOrderText, waLink } from '@/lib/print'
 import type { ExchangeRateResponse, Item, Party, PurchaseOrder, UnifiedPurchasesResponse, Warehouse } from '@/types'
 
@@ -101,14 +102,11 @@ export default function ImportOrderCreate() {
   }, [loadAll])
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     return items.filter((it) => {
       if (!q) return true
-      const haystack = [it.itemCode, it.itemName, it.barcode, it.modelNumber]
-        .filter(Boolean)
-        .map((s) => String(s).toLowerCase())
-        .join(' ')
-      return haystack.includes(q)
+      const haystack = buildSearchHaystack(it.itemCode, it.itemName, it.barcode, it.modelNumber)
+      return searchMatch(haystack, q)
     })
   }, [items, search])
 

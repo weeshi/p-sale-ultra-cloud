@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Papa from 'papaparse'
+import DataList, { type DataListColumn } from '@/components/DataList'
 import Modal from '@/components/Modal'
 import { api, extractError } from '@/lib/api'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import { cachedRead, offlineWrite } from '@/lib/offline'
 import { useBranchFilter } from '@/contexts/BranchFilterContext'
 import { printInventoryCountSheet } from '@/lib/print'
@@ -336,8 +338,93 @@ export default function InventoryCounts() {
   const lineTotalDiff = (it: InventoryCountItem): number =>
     toNum(goodMap[it.id]) + toNum(damagedMap[it.id] ?? 0) - toNum(it.systemQty)
 
+  const countColumns: DataListColumn<InventoryCount>[] = [
+    {
+      key: 'number',
+      label: 'الرقم',
+      render: (c) => (
+        <span className={`font-mono text-xs ${c.parentCountId ? 'text-amber-800' : ''}`}>
+          {c.parentCountId ? <span className="text-slate-400">↳ </span> : null}
+          {c.countNumber}
+        </span>
+      ),
+      mobileLabel: 'رقم الجرد',
+    },
+    {
+      key: 'date',
+      label: 'التاريخ',
+      render: (c) => fmtDate(c.countDate),
+    },
+    {
+      key: 'warehouse',
+      label: 'المخزن',
+      render: (c) => c.warehouse?.name ?? `#${c.warehouseId}`,
+    },
+    {
+      key: 'items',
+      label: 'الأصناف',
+      render: (c) => <span className="text-center">{c.items?.length ?? 0}</span>,
+      mobileHidden: true,
+    },
+    {
+      key: 'status',
+      label: 'الحالة',
+      render: (c) => (
+        <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[c.status] ?? ''}`}>
+          {STATUS_LABEL[c.status] ?? c.status}
+        </span>
+      ),
+    },
+    {
+      key: 'poster',
+      label: 'منفذ الجرد',
+      render: (c) => c.poster?.fullName ?? c.creator?.fullName ?? <span className="text-slate-400">—</span>,
+      mobileHidden: true,
+    },
+    {
+      key: 'actions',
+      label: 'إجراءات',
+      render: (c) => (
+        <div className="flex flex-wrap gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); openCount(c.id) }}
+            className="rounded px-2 py-1 text-xs text-brand-700 hover:bg-brand-50"
+          >
+            {c.status === 'posted' ? 'عرض' : 'إدخال/عرض'}
+          </button>
+          {c.status === 'posted' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); createCorrective(c) }}
+              className="rounded px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+            >
+              🔄 جرد تصحيحي
+            </button>
+          )}
+          {c.status === 'draft' && (
+            <button
+              onClick={async (e) => {
+                e.stopPropagation()
+                if (!confirm(`هل أنت متأكد من حذف الجرد ${c.countNumber}؟`)) return
+                try {
+                  await api.delete(`/inventory/counts/${c.id}`)
+                  await loadAll()
+                } catch (err) {
+                  setError(extractError(err))
+                }
+              }}
+              className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+            >
+              🗑️ حذف
+            </button>
+          )}
+        </div>
+      ),
+      mobileHidden: true,
+    },
+  ]
+
   return (
-    <div className="p-6">
+    <div className="p-4 lg:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">جرد المخزون</h1>
@@ -350,81 +437,14 @@ export default function InventoryCounts() {
 
       {loading ? (
         <p className="py-16 text-center text-slate-400">جارٍ تحميل الجردات...</p>
-      ) : counts.length === 0 ? (
-        <div className="card text-center text-slate-400">لا توجد جردات بعد</div>
       ) : (
-        <div className="card overflow-x-auto p-0">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>الرقم</th>
-                <th>التاريخ</th>
-                <th>المخزن</th>
-                <th>الأصناف</th>
-                <th>الحالة</th>
-                <th>منفذ الجرد</th>
-                <th>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {counts.map((c) => (
-                <tr key={c.id} className={c.parentCountId ? 'bg-amber-50/50' : ''}>
-                  <td className={`font-mono text-xs ${c.parentCountId ? 'text-amber-800' : ''}`}>
-                    {c.parentCountId ? <span className="text-slate-400">↳ </span> : null}
-                    {c.countNumber}
-                  </td>
-                  <td>{fmtDate(c.countDate)}</td>
-                  <td>{c.warehouse?.name ?? `#${c.warehouseId}`}</td>
-                  <td>{c.items?.length ?? 0}</td>
-                  <td>
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[c.status] ?? ''}`}>
-                      {STATUS_LABEL[c.status] ?? c.status}
-                    </span>
-                  </td>
-                  <td>
-                    {c.poster?.fullName ?? c.creator?.fullName ?? (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="flex flex-wrap gap-1">
-                      <button
-                        onClick={() => openCount(c.id)}
-                        className="rounded px-2 py-1 text-xs text-brand-700 hover:bg-brand-50"
-                      >
-                        {c.status === 'posted' ? 'عرض' : 'إدخال/عرض'}
-                      </button>
-                      {c.status === 'posted' && (
-                        <button
-                          onClick={() => createCorrective(c)}
-                          className="rounded px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
-                        >
-                          🔄 جرد تصحيحي
-                        </button>
-                      )}
-                      {c.status === 'draft' && (
-                        <button
-                          onClick={async () => {
-                            if (!confirm(`هل أنت متأكد من حذف الجرد ${c.countNumber}؟`)) return
-                            try {
-                              await api.delete(`/inventory/counts/${c.id}`)
-                              await loadAll()
-                            } catch (err) {
-                              setError(extractError(err))
-                            }
-                          }}
-                          className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                        >
-                          🗑️ حذف
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataList
+          data={counts}
+          columns={countColumns}
+          onRowClick={(c) => openCount(c.id)}
+          emptyText="لا توجد جردات بعد"
+          keyFn={(c) => c.id}
+        />
       )}
 
       {/* ===== إنشاء جرد ===== */}
@@ -599,12 +619,10 @@ export default function InventoryCounts() {
 <tbody>
                   {(viewCount.items ?? [])
                     .filter((it) => {
-                      const s = search.toLowerCase().trim()
+                      const s = search.trim()
                       if (!s) return true
-                      const name = it.item?.itemName?.toLowerCase() ?? ''
-                      const code = it.item?.itemCode?.toLowerCase() ?? ''
-                      const barcode = it.item?.barcode?.toLowerCase() ?? ''
-                      return name.includes(s) || code.includes(s) || barcode.includes(s)
+                      const haystack = buildSearchHaystack(it.item?.itemName, it.item?.itemCode, it.item?.barcode)
+                      return searchMatch(haystack, s)
                     })
                     .map((it) => {
                       const totalDiff = lineTotalDiff(it)
