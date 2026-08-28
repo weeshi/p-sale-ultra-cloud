@@ -46,8 +46,12 @@ test-results/
 # Backup env files
 server/.env.bak.*
 
-# SQL backups
+# SQL backups (dumps only; Prisma migration.sql files must remain tracked)
 *.sql
+!server/prisma/migrations/**/migration.sql
 
 # Python migration scripts
 migrate_items.py
+
+# License system keys (NEVER commit private keys)
+.keys/
