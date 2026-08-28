@@ -34,7 +34,7 @@ test.describe('شاشة البيع', () => {
     await expect(page.getByText('السلة فارغة')).not.toBeVisible()
 
     // اختيار خزينة الدفع النقدي
-    await selectByLabel(page, 'الخزينة/الحساب *', env.treasuryName)
+    await selectByLabel(page, 'الخزينة *', env.treasuryName)
 
     // حفظ الفاتورة
     await page.getByRole('button', { name: 'حفظ الفاتورة' }).click()

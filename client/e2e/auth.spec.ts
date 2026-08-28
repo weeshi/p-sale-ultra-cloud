@@ -31,7 +31,7 @@ test.describe('تسجيل الدخول', () => {
 
   test('تسجيل الخروج يعيد للشاشة الرئيسية', async ({ page }) => {
     await loginAsAdmin(page)
-    await page.getByTitle('تسجيل الخروج').click()
+    await page.getByTitle('تسجيل الخروج').first().click()
     await expect(page.getByRole('heading', { name: 'P-Sale Ultra Cloud' })).toBeVisible()
   })
 })
