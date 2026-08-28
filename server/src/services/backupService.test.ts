@@ -1,7 +1,6 @@
 import { execFile } from 'child_process'
 import fs from 'fs'
-// load createBackup after setting process.platform in each test
-let createBackup: typeof import('./backupService').createBackup
+import { createBackup } from './backupService'
 
 jest.mock('child_process', () => ({
   execFile: jest.fn(),
@@ -48,9 +47,6 @@ describe('BackupService.createBackup', () => {
 
   it('على Windows يشغّل PowerShell مع ExecutionPolicy Bypass من جذر المشروع', async () => {
     setPlatform('win32')
-    jest.resetModules()
-    // require after resetting modules so platform-dependent init runs for win32
-    createBackup = require('./backupService').createBackup
     const result = await createBackup()
 
     expect(mockExecFile).toHaveBeenCalledWith(
@@ -64,8 +60,6 @@ describe('BackupService.createBackup', () => {
 
   it('على Linux يشغّل bash script', async () => {
     setPlatform('linux')
-    jest.resetModules()
-    createBackup = require('./backupService').createBackup
     await createBackup()
     expect(mockExecFile).toHaveBeenCalledWith(
       'bash',
@@ -77,8 +71,6 @@ describe('BackupService.createBackup', () => {
 
   it('يرفع خطأً عندما يفشل السكربت', async () => {
     setPlatform('win32')
-    jest.resetModules()
-    createBackup = require('./backupService').createBackup
     mockExecFile.mockImplementation((...args: unknown[]) => {
       const cb = args[args.length - 1] as (err: Error | null) => void
       cb(new Error('mysqldump not found'))
@@ -88,16 +80,12 @@ describe('BackupService.createBackup', () => {
 
   it('يرفع خطأً عند غياب ملفات النسخ رغم نجاح السكربت', async () => {
     setPlatform('win32')
-    jest.resetModules()
-    createBackup = require('./backupService').createBackup
     mockFs.readdirSync.mockReturnValue([] as never)
     await expect(createBackup()).rejects.toThrow('لم يُعثر على ملف النسخة')
   })
 
   it('يرجع أحدث ملف من حيث وقت التعديل', async () => {
     setPlatform('win32')
-    jest.resetModules()
-    createBackup = require('./backupService').createBackup
     mockFs.statSync.mockImplementation((p: unknown) =>
       (p as string).includes('100000') ? ({ mtimeMs: 1, size: 10 } as never) : ({ mtimeMs: 5, size: 20 } as never)
     )
