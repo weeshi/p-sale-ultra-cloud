@@ -179,13 +179,13 @@ p-sale-ultra-cloud/
 
 12. **License System = Hardware-Bound Ed25519 (نظام الترخيص)**
     - **`hwHash` إجباري** في LicensePayload و Prisma schema (`hwHash String` بدون `?`) — بصمة الجهاز (CPU + MAC SHA256) مطلوبة لكل تثبيت بلا استثناء
-    - **Private Key أبداً لا يلمس Production** — التوقيع فقط عبر CLI محلي مستقل (`sign-license.ts`) يعمل على جهاز المدير
+    - **Private Key أبداً لا يلمس Production** — التوقيع فقط محلياً على جهاز المدير عبر CLI (`sign-license.ts`) **أو واجهة الويب المحلية** (`scripts/license-issuer/`، ترتبط بـ `127.0.0.1` إجباري) — كلاهما يستهلك `scripts/licenseLib.ts` المشتركة فينتجان **ناتجاً متطابقاً بايتاً**؛ الواجهة بلا DB/شبكة وتكتب سجل إصدارات JSONL محلياً فقط (`issued-licenses.log`)
     - **`public_key.pem` في `.keys/`** — السيرفر يحمل المفتاح العام فقط للتحقق
     - **Middleware `checkLicense`** يفرض التحقق في كل طلب: توقيع + hwHash + انقضاء + تفعيل — استثناءات: `/api/health`، `/api/auth/login`، `/api/license/*`
     - **Trial = 30 يوم** من تاريخ إنشاء الشركة، يتوقف النظام بدون ترخيص صالح
     - **`GET /api/license/machine-id`** endpoint مكشوف (بدون auth) لاستخراج بصمة الجهاز — العملاء يرسلونها للمدير لتوليد الترخيص
     - **Feature Gating**: tiers (trial/basic/pro/enterprise) تحدد الميزات المفعّلة — enterprise = `['*']`
-    - **التفعيل**: المدير يوقع عبر CLI → يرسل Base64 للعميل → العميل يلصقه في `/api/license/activate` → السيرفر يتحقق ويحفظ
+    - **التفعيل**: المدير يوقع عبر CLI **أو واجهة الويب المحلية** (`npm run license:issuer` → `http://127.0.0.1:3333`) → يرسل Base64 للعميل → العميل يلصقه في `/api/license/activate` → السيرفر يتحقق ويحفظ
 
 13. **Offline Engine Hardening (تقوية محرك عدم الاتصال)**
     - **`navigator.onLine` غير موثوق** (يرجع `true` حتى مع انقطاع فعلي، خاصة بين جهاز التوجيه والمزوّد) — **مصدر الحقيقة هو `fetch('/api/health')`** وليس مستمع أحداث المتصفح
@@ -215,7 +215,7 @@ p-sale-ultra-cloud/
 | **9. Pages — Treasury** | ✅ **مكتمل (9.1-9.7)** — `Treasuries.tsx` + `Receipts.tsx` + `BankReconciliation.tsx` + `TreasuryHub.tsx` | متوسط |
 | **10. Pages — Settings** | ✅ **مكتمل** — `CompanySettings.tsx` + `UsersSettings.tsx` + `BranchesWarehouses.tsx` + `ExchangeRates.tsx` + `AuditLogs.tsx` + `SettingsHub.tsx` | متوسط |
 | **11. Polish & Deploy** | ✅ **مكتمل** — 11.1 ✅ (Unit Tests 44) + 11.2 ✅ (Integration على MySQL اختباري) + 11.3 ✅ (E2E Playwright) + 11.4 ✅ (Docker جاهز، لم يُجرَّب) + 11.5 ✅ (CI/CD) + 11.6 ✅ (Monitoring) + 11.7 ✅ (Backup) + 11.8 ✅ (Prod/SSL) + 11.9 ✅ (Security) | منخفض |
-| **12. License System** | ✅ **مكتمل** — 12.1 ✅ (Ed25519 key generation) + 12.2 ✅ (Prisma Schema + Migration) + 12.3 ✅ (License Service) + 12.4 ✅ (Offline Signing CLI) + 12.5 ✅ (API Routes) + 12.6 ✅ (checkLicense Middleware) + 12.7 ✅ (App Integration) + 12.8 ✅ (Admin UI) + 12.9 ✅ (Unit Tests 67) | عالي |
+| **12. License System** | ✅ **مكتمل** — 12.1 ✅ (Ed25519 key generation) + 12.2 ✅ (Prisma Schema + Migration) + 12.3 ✅ (License Service) + 12.4 ✅ (Offline Signing CLI + **Issuer Web UI**) + 12.5 ✅ (API Routes) + 12.6 ✅ (checkLicense Middleware) + 12.7 ✅ (App Integration) + 12.8 ✅ (Admin UI) + 12.9 ✅ (Unit Tests 67) + 12.10 ✅ (Web UI محلية لإصدار التراخيص) | عالي |
 
 ---
 

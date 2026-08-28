@@ -21,25 +21,10 @@
  * Output: Base64-encoded signed license string to paste into /api/license/activate
  */
 
-import crypto from 'crypto'
 import fs from 'fs'
-import path from 'path'
+import { PRIVATE_KEY_PATH, buildLicensePayload, signLicensePayload, getDefaultFeatures } from './licenseLib'
 
-const KEYS_DIR = path.resolve(__dirname, '../../.keys')
-const PRIVATE_KEY_PATH = path.join(KEYS_DIR, 'private_key.pem')
-
-interface SignOptions {
-  companyId: number
-  hwHash: string
-  tier: string
-  expiresAt: string | null
-  features: string[]
-  maxUsers: number | null
-  maxBranches: number | null
-  notes: string | null
-}
-
-function parseArgs(): SignOptions {
+function parseArgs() {
   const args = process.argv.slice(2)
   const get = (name: string): string | undefined => {
     const idx = args.indexOf(`--${name}`)
@@ -91,31 +76,10 @@ function main() {
   const options = parseArgs()
 
   // Build license payload
-  const licenseKey = crypto.randomUUID()
-  const payload = JSON.stringify({
-    companyId: options.companyId,
-    licenseKey,
-    tier: options.tier,
-    issuedAt: new Date().toISOString(),
-    expiresAt: options.expiresAt,
-    maxUsers: options.maxUsers,
-    maxBranches: options.maxBranches,
-    hwHash: options.hwHash,
-    features: options.features.length > 0 ? options.features : getDefaultFeatures(options.tier),
-  })
+  const { payload, licenseKey } = buildLicensePayload(options)
 
   // Sign with private key
-  const privateKeyPem = fs.readFileSync(PRIVATE_KEY_PATH, 'utf8')
-  const privateKey = crypto.createPrivateKey(privateKeyPem)
-  const signature = crypto.sign(null, Buffer.from(payload), privateKey)
-
-  // Output
-  const output = {
-    payload,
-    signature: signature.toString('base64'),
-  }
-
-  const encoded = Buffer.from(JSON.stringify(output)).toString('base64')
+  const { base64: encoded } = signLicensePayload(payload)
 
   console.log('✅ License signed successfully!\n')
   console.log('📋 License Details:')
@@ -124,7 +88,7 @@ function main() {
   console.log(`   Tier:        ${options.tier}`)
   console.log(`   Expires:     ${options.expiresAt || 'Never (perpetual)'}`)
   console.log(`   HW Hash:     ${options.hwHash}`)
-  console.log(`   Features:    ${output.payload.includes('"*"') ? 'All (enterprise)' : options.features.join(', ')}`)
+  console.log(`   Features:    ${payload.includes('"*"') ? 'All (enterprise)' : options.features.join(', ')}`)
   console.log('')
   console.log('🔑 Signed License String (Base64):')
   console.log('   Send this to the customer to activate via /api/license/activate')
@@ -132,16 +96,6 @@ function main() {
   console.log(encoded)
   console.log('')
   console.log('--- Copy everything between the lines above ---')
-}
-
-function getDefaultFeatures(tier: string): string[] {
-  const defaults: Record<string, string[]> = {
-    trial: ['sales', 'purchases', 'inventory', 'basic_reports'],
-    basic: ['sales', 'purchases', 'inventory', 'accounting', 'treasury', 'basic_reports'],
-    pro: ['sales', 'purchases', 'inventory', 'accounting', 'treasury', 'advanced_reports', 'multi_branch', 'warranty'],
-    enterprise: ['*'],
-  }
-  return defaults[tier] || defaults.basic
 }
 
 main()

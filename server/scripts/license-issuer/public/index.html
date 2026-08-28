@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>إصدار التراخيص — P-Sale Ultra</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #1e293b;
+        --panel-2: #273449;
+        --line: #334155;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --accent: #10b981;
+        --accent-2: #065f46;
+        --red: #ef4444;
+        --amber: #f59e0b;
+        --blue: #3b82f6;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, "Noto Kufi Arabic", Arial, sans-serif;
+        background: linear-gradient(160deg, #0f172a 0%, #0b1120 60%, #0f172a 100%);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 24px 16px 64px;
+      }
+      .wrap { max-width: 860px; margin: 0 auto; }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+      header h1 { font-size: 22px; margin: 0; }
+      header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+      .pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 12px; border-radius: 999px;
+        font-size: 12px; font-weight: 700; white-space: nowrap;
+        background: var(--panel-2); border: 1px solid var(--line);
+      }
+      .pill.ok { color: #6ee7b7; border-color: #065f46; }
+      .pill.bad { color: #fca5a5; border-color: #7f1d1d; }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+      .card h2 { margin: 0 0 14px; font-size: 16px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+      label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; font-weight: 600; }
+      input[type="text"], input[type="number"], input[type="date"], select, textarea {
+        width: 100%;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 9px 11px;
+        font-size: 14px;
+        font-family: inherit;
+      }
+      input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+      input[dir="ltr"], textarea[dir="ltr"] { text-align: left; direction: ltr; font-family: "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+      .check-row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .check-row label { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 6px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; color: var(--text); cursor: pointer; font-weight: 500; }
+      .check-row input { accent-color: var(--accent); width: 15px; height: 15px; }
+      .hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.7; }
+      .hint code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; direction: ltr; unicode-bidi: isolate; }
+      .row-inline { display: flex; gap: 12px; align-items: center; }
+      .row-inline input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        border: 0; border-radius: 10px; padding: 11px 18px;
+        font-size: 14px; font-weight: 700; cursor: pointer;
+        color: #fff; background: var(--accent);
+        transition: filter .15s ease;
+      }
+      .btn:hover { filter: brightness(1.1); }
+      .btn:disabled { opacity: .5; cursor: not-allowed; }
+      .btn.blue { background: var(--blue); }
+      .btn.ghost { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); }
+      .btn.small { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+      .error { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; white-space: pre-wrap; }
+      .okmsg { background: #052e16; border: 1px solid #065f46; color: #86efac; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+      .result-base64 { width: 100%; min-height: 120px; resize: vertical; background: #0b1520; border: 1px solid var(--accent); color: #a5f3fc; font-family: "Cascadia Mono", Consolas, monospace; direction: ltr; text-align: left; font-size: 12px; }
+      .details { font-size: 13px; line-height: 1.9; color: var(--muted); }
+      .details b { color: var(--text); }
+      .steps { counter-reset: step; margin: 0; padding: 0; list-style: none; }
+      .steps li { position: relative; padding: 8px 34px 8px 0; margin-bottom: 6px; font-size: 13px; color: var(--muted); line-height: 1.8; }
+      .steps li::before {
+        counter-increment: step; content: counter(step);
+        position: absolute; right: 0; top: 10px;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: var(--accent-2); color: #6ee7b7;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 700;
+      }
+      hr.sep { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+      .muted { color: var(--muted); }
+      .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: var(--panel-2); border: 1px solid var(--line); margin-left: 4px; }
+      footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>🔐 إصدار التراخيص — P-Sale Ultra</h1>
+          <p>أداة التوقيع المحلية للمدير (أوفلاين — المفتاح الخاص لا يغادر هذا الجهاز أبداً)</p>
+        </div>
+        <span id="keyBadge" class="pill bad">⏳ جاري فحص المفاتيح...</span>
+      </header>
+
+      <div id="keyWarning" class="error hidden"></div>
+      <div id="globalError" class="error hidden"></div>
+      <div id="globalOk" class="okmsg hidden"></div>
+
+      <div class="card">
+        <h2>📋 كيف تعمل العملية؟</h2>
+        <ol class="steps">
+          <li>اسأل العميل عن <b>معرّف جهازه</b>: اطلب منه فتح <code dir="ltr">GET /api/license/machine-id</code> على جهاز السيرفر وإرسال <code>hwHash</code> إليك.</li>
+          <li>عبي النموذج أدناه (معرّف الشركة + المستوى + المدة + الميزات + الحدود).</li>
+          <li>اضغط <b>«توقيع وإصدار»</b> — سيُولَّد نص الترخيص المُوقَّع (Base64) محلياً بمفتاحك الخاص.</li>
+          <li>أرسل النص للعميل، واطلب منه لصقه في <code dir="ltr">POST /api/license/activate</code>.</li>
+          <li>تحقق من صحة التوقيع قبل الإرسال عبر قسم «التحقق من نص مُوقَّع» أدناه.</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h2>🛠️ بيانات الترخيص الجديد</h2>
+        <div class="grid">
+          <div>
+            <label>معرّف الشركة (companyId) *</label>
+            <input type="number" id="companyId" min="1" placeholder="مثال: 1" dir="rtl" />
+          </div>
+          <div>
+            <label>المستوى (Tier) *</label>
+            <select id="tier"></select>
+          </div>
+          <div>
+            <label>تاريخ الانتهاء (expiresAt)</label>
+            <input type="date" id="expiresAt" />
+          </div>
+          <div class="row-inline" style="padding-top:26px">
+            <input type="checkbox" id="perpetual" checked />
+            <label for="perpetual" style="margin:0;color:var(--text)">ترخيص دائم (بلا انتهاء)</label>
+          </div>
+          <div>
+            <label>أقصى عدد مستخدمين</label>
+            <input type="number" id="maxUsers" min="1" placeholder="اختياري — فارغ = غير محدود" />
+          </div>
+          <div>
+            <label>أقصى عدد فروع</label>
+            <input type="number" id="maxBranches" min="1" placeholder="اختياري — فارغ = غير محدود" />
+          </div>
+        </div>
+
+        <div style="margin-top:14px">
+          <label>معرّف الجهاز (hwHash) الخاص بالعميل *</label>
+          <textarea id="hwHash" rows="2" dir="ltr" placeholder="الصق hwHash المستلم من العميل هنا..."></textarea>
+          <div class="hint">يُحصل عليه من العميل عبر <code dir="ltr">GET /api/license/machine-id</code> — لا يمكنك توليده من جهازك لأن بصمة العتاد خاصة بجهاز السيرفر.</div>
+        </div>
+
+        <div style="margin-top:14px">
+          <label>الميزات المفعّلة (تُعبّأ تلقائياً حسب المستوى — عدّلها بحرية)</label>
+          <div class="check-row" id="featuresBox"></div>
+          <div class="hint"><b>*</b> = كل الميزات (مستوى enterprise). المستويات الأخرى تعبّئ قوائمها الافتراضية تلقائياً عند تغيير المستوى.</div>
+        </div>
+
+        <div style="margin-top:14px">
+          <label>ميزات إضافية مخصصة (مفصولة بفاصلة، اختياري)</label>
+          <input type="text" id="extraFeatures" dir="ltr" placeholder="feature1, feature2" />
+        </div>
+
+        <div style="margin-top:14px">
+          <label>ملاحظات داخلية (تُسجل في سجلِّك المحلي فقط ولا تُضمَّن في الترخيص)</label>
+          <input type="text" id="notes" dir="rtl" placeholder="اسم العميل أو رقم العقد..."/>
+        </div>
+
+        <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-start">
+          <button class="btn" id="issueBtn">⚡ توقيع وإصدار الترخيص</button>
+        </div>
+      </div>
+
+      <div class="card hidden" id="resultCard">
+        <h2>✅ الترخيص صدر بنجاح</h2>
+        <div class="details" id="resultDetails"></div>
+        <label style="margin-top:14px">نص الترخيص المُوقَّع (Base64) — أرسله للعميل لتفعيله:</label>
+        <textarea class="result-base64" id="resultBase64" readonly rows="5"></textarea>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn small" id="copyBase64">📋 نسخ النص</button>
+          <button class="btn small ghost" id="verifyIssued">🛡️ تحقق من التوقيع محلياً</button>
+        </div>
+        <div id="issuedVerify"></div>
+      </div>
+
+      <div class="card">
+        <h2>🛡️ التحقق من نص مُوقَّع</h2>
+        <p class="hint">الصق أي نص ترخيص مُوقَّع للتحقق منه بالمفتاح العام محلياً قبل إرساله للعميل.</p>
+        <textarea id="verifyInput" rows="4" dir="ltr" placeholder="الصق نص الترخيص (Base64) هنا..."></textarea>
+        <div style="margin-top:10px">
+          <button class="btn blue small" id="verifyBtn">تحقق</button>
+        </div>
+        <div id="verifyOutput"></div>
+      </div>
+
+      <footer>
+        تعمل الأداة على <code dir="ltr">127.0.0.1</code> فقط داخل جهازك — المفتاح الخاص (<code dir="ltr">.keys/private_key.pem</code>) يُقرأ محلياً ولا يُنقل لأي مكان. سجل الإصدارات: <code dir="ltr">server/scripts/license-issuer/issued-licenses.log</code>
+      </footer>
+    </div>
+
+    <script>
+      const ALL_FEATURES = [
+        'sales', 'purchases', 'inventory', 'accounting', 'treasury',
+        'basic_reports', 'advanced_reports', 'multi_branch', 'warranty',
+      ];
+      const $ = (id) => document.getElementById(id);
+
+      let tierLabels = {};
+      let tierFeatures = {};
+      let tierDefault = 'basic';
+      let keysGood = false;
+
+      const badge = $('keyBadge');
+      const keyWarning = $('keyWarning');
+      const showErr = (el, msg) => { el.textContent = msg; el.classList.remove('hidden'); };
+      const hideErr = (el) => { el.classList.add('hidden'); el.textContent = ''; };
+      const showOk = (msg) => { $('globalOk').textContent = msg; $('globalOk').classList.remove('hidden'); };
+      const hideOk = () => $('globalOk').classList.add('hidden');
+
+      function renderFeatures(tier) {
+        const box = $('featuresBox');
+        box.innerHTML = '';
+        if (tier === 'enterprise') {
+          const lab = document.createElement('label');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.value = '*';
+          cb.checked = true;
+          lab.appendChild(cb);
+          lab.appendChild(document.createTextNode(' ★ كل الميزات'));
+          box.appendChild(lab);
+          return;
+        }
+        const defaults = tierFeatures[tier] || tierFeatures['basic'] || [];
+        const nameOf = (f) => ({ '*': '★ كل الميزات' }[f] || f);
+        for (const f of ALL_FEATURES.concat('*')) {
+          if (f === '*') continue;
+          const lab = document.createElement('label');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.value = f;
+          cb.checked = defaults.includes(f);
+          lab.appendChild(cb);
+          lab.appendChild(document.createTextNode(' ' + nameOf(f)));
+          box.appendChild(lab);
+        }
+      }
+
+      function readFeatures() {
+        const checked = Array.from($('featuresBox').querySelectorAll('input:checked')).map((c) => c.value);
+        const custom = ($('extraFeatures').value || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const merged = Array.from(new Set(checked.concat(custom)));
+        if (merged.includes('*')) return ['*'];
+        return merged;
+      }
+
+      async function loadStatus() {
+        try {
+          const res = await fetch('/api/status');
+          const data = await res.json();
+          tierLabels = data.tierLabels || {};
+          tierFeatures = data.tierFeatures || {};
+          const sel = $('tier');
+          sel.innerHTML = '';
+          for (const t of data.tiers || []) {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = tierLabels[t] || t;
+            sel.appendChild(opt);
+          }
+          sel.value = tierDefault;
+          keysGood = data.keys && data.keys.private && data.keys.public;
+          if (keysGood) {
+            badge.textContent = '✅ المفتاحان جاهزان';
+            badge.classList.remove('bad'); badge.classList.add('ok');
+          } else {
+            badge.textContent = '❌ المفاتيح غير موجودة';
+            badge.classList.remove('ok'); badge.classList.add('bad');
+            showErr(keyWarning, 'مفاتيح التوقيع غير موجودة على هذا الجهاز.\nشغّل الأمر التالي أولاً لإنشائها:\n  npx tsx server/scripts/generate-license-keys.ts\n\nالخاص: ' + (data.keys && data.keys.privatePath !== undefined ? data.keys : '') + '\n' + data.privateKeyPath + '\nالعام: ' + data.publicKeyPath);
+          }
+          $('tier').addEventListener('change', () => renderFeatures($('tier').value));
+          renderFeatures(sel.value);
+        } catch (e) {
+          badge.textContent = '❌ لا يمكن الاتصال بالأداة المحلية';
+          showErr(keyWarning, 'تعذر الاتصال بالخادم المحلي (' + e.message + ')\nشغّل: npx tsx server/scripts/license-issuer/server.ts ثم أعد فتح هذه الصفحة.');
+        }
+      }
+
+      function toggleDate() {
+        $('expiresAt').disabled = $('perpetual').checked;
+      }
+
+      async function issue() {
+        hideErr($('globalError')); hideOk();
+        const companyId = parseInt($('companyId').value || '', 10);
+        if (!companyId || isNaN(companyId)) { showErr($('globalError'), 'معرّف الشركة مطلوب ويجب أن يكون رقماً'); return; }
+        const hwHash = $('hwHash').value.trim();
+        if (!hwHash) { showErr($('globalError'), 'معرّف الجهاز (hwHash) مطلوب'); return; }
+        const body = {
+          companyId,
+          hwHash,
+          tier: $('tier').value,
+          expiresAt: $('perpetual').checked ? '' : $('expiresAt').value,
+          maxUsers: $('maxUsers').value ? parseInt($('maxUsers').value, 10) : null,
+          maxBranches: $('maxBranches').value ? parseInt($('maxBranches').value, 10) : null,
+          features: readFeatures(),
+          notes: $('notes').value.trim() || null,
+        };
+        const btn = $('issueBtn');
+        btn.disabled = true; btn.textContent = '⏳ جاري التوقيع...';
+        try {
+          const res = await fetch('/api/issue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'فشل التوقيع');
+          const p = JSON.parse(data.payload);
+          $('resultBase64').value = data.base64;
+          $('resultDetails').innerHTML =
+            '<b>المستوى:</b> ' + (tierLabels[p.tier] || p.tier) +
+            ' &nbsp;|&nbsp; <b>معرّف الترخيص:</b> <span class="tag" dir="ltr">' + data.licenseKey + '</span>' +
+            ' &nbsp;|&nbsp; <b>الشركة:</b> ' + p.companyId +
+            ' &nbsp;|&nbsp; <b>الانتهاء:</b> ' + (p.expiresAt ? p.expiresAt : 'دائم') +
+            ' &nbsp;|&nbsp; <b>الحدود:</b> ' + (p.maxUsers || '∞') + ' مستخدم / ' + (p.maxBranches || '∞') + ' فرع' +
+            '<br/><b>الميزات:</b> ' + (p.features.length === 1 && p.features[0] === '*' ? '★ كل الميزات' : p.features.join(', '));
+          $('resultCard').classList.remove('hidden');
+          $('issuedVerify').innerHTML = '';
+          $('resultCard').scrollIntoView({ behavior: 'smooth' });
+        } catch (e) {
+          showErr($('globalError'), e.message || String(e));
+        } finally {
+          btn.disabled = false; btn.textContent = '⚡ توقيع وإصدار الترخيص';
+        }
+      }
+
+      function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext !== false) {
+          return navigator.clipboard.writeText(text);
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch {}
+        document.body.removeChild(ta);
+        return Promise.resolve();
+      }
+
+      async function verify(base64, el) {
+        el.innerHTML = '⏳ جاري التحقق...';
+        try {
+          const res = await fetch('/api/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ base64 }),
+          });
+          const data = await res.json();
+          if (data.valid) {
+            const p = data.payload;
+            el.innerHTML = '<div class="okmsg" style="margin-top:10px">✅ التوقيع صحيح — ترخيص ' + (tierLabels[p.tier] || p.tier) +
+              ' (الشركة ' + p.companyId + ') حتى ' + (p.expiresAt || 'دائم') + '</div>';
+          } else {
+            el.innerHTML = '<div class="error" style="margin-top:10px">❌ ' + (data.error || 'توقيع غير صالح') + '</div>';
+          }
+        } catch (e) {
+          el.innerHTML = '<div class="error" style="margin-top:10px">❌ ' + e.message + '</div>';
+        }
+      }
+
+      $('perpetual').addEventListener('change', toggleDate);
+      $('issueBtn').addEventListener('click', issue);
+      $('copyBase64').addEventListener('click', async () => {
+        await copyText($('resultBase64').value);
+        showOk('📋 نُسخ النص إلى الحافظة');
+      });
+      $('verifyIssued').addEventListener('click', () => verify($('resultBase64').value, $('issuedVerify')));
+      $('verifyBtn').addEventListener('click', () => {
+        const ta = $('verifyInput').value.trim();
+        if (!ta) { $('verifyOutput').innerHTML = '<div class="error" style="margin-top:10px">الصق نص الترخيص أولاً</div>'; return; }
+        verify(ta, $('verifyOutput'));
+      });
+
+      toggleDate();
+      loadStatus();
+    </script>
+  </body>
+</html>

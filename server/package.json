@@ -14,7 +14,9 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:integration": "npm run test:integration:db && jest --config jest.integration.config.cjs",
-    "test:integration:db": "node scripts/setup-integration-db.cjs"
+    "test:integration:db": "node scripts/setup-integration-db.cjs",
+    "license:issuer": "tsx scripts/license-issuer/server.ts",
+    "license:sign": "tsx scripts/sign-license.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
