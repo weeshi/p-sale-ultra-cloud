@@ -7,8 +7,6 @@ const execFileAsync = promisify(execFile)
 
 // جذر المشروع (server/src/services → ../../../)
 const PROJECT_ROOT = path.resolve(__dirname, '../../../')
-const SCRIPTS_DIR = path.join(PROJECT_ROOT, 'scripts')
-const BACKUP_DIR = path.join(PROJECT_ROOT, 'backups')
 
 export interface BackupResult {
   filename: string
@@ -19,7 +17,12 @@ export interface BackupResult {
 // تشغيل سكربت النسخ الاحتياطي (حسب المنصة) ثم إرجاع أحدث ملف backup_*.sql.gz
 export async function createBackup(): Promise<BackupResult> {
   const isWin = process.platform === 'win32'
-  const script = path.join(SCRIPTS_DIR, isWin ? 'backup.ps1' : 'backup.sh')
+  // `path` الافتراضي في Node مُجمّع حسب نظام التشغيل (لا يتأثر بتجاوز process.platform)،
+  // لذا نختار المكوّن win32/posix صراحةً لحساب المسارات حسب المنصة الفعلية في زمن التنفيذ
+  const pp = isWin ? path.win32 : path.posix
+  const scriptsDir = pp.join(PROJECT_ROOT, 'scripts')
+  const backupDir = pp.join(PROJECT_ROOT, 'backups')
+  const script = pp.join(scriptsDir, isWin ? 'backup.ps1' : 'backup.sh')
 
   if (!fs.existsSync(script)) {
     throw new Error(`سكربت النسخ الاحتياطي غير موجود: ${script}`)
@@ -44,8 +47,8 @@ export async function createBackup(): Promise<BackupResult> {
     throw new Error(`فشل إنشاء النسخة الاحتياطية: ${detail}`)
   }
 
-  const candidates = fs.existsSync(BACKUP_DIR)
-    ? fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.sql.gz'))
+  const candidates = fs.existsSync(backupDir)
+    ? fs.readdirSync(backupDir).filter((f) => f.endsWith('.sql.gz'))
     : []
 
   if (candidates.length === 0) {
@@ -53,12 +56,12 @@ export async function createBackup(): Promise<BackupResult> {
   }
 
   const latest = candidates
-    .map((f) => ({ f, time: fs.statSync(path.join(BACKUP_DIR, f)).mtimeMs }))
+    .map((f) => ({ f, time: fs.statSync(pp.join(backupDir, f)).mtimeMs }))
     .sort((a, b) => b.time - a.time)[0]
 
   return {
     filename: latest.f,
-    path: path.join(BACKUP_DIR, latest.f),
-    sizeBytes: fs.statSync(path.join(BACKUP_DIR, latest.f)).size,
+    path: pp.join(backupDir, latest.f),
+    sizeBytes: fs.statSync(pp.join(backupDir, latest.f)).size,
   }
 }

@@ -15,6 +15,19 @@ export function branchScope(branchId: number | null | undefined): string {
   return String(branchId ?? 'global')
 }
 
+/** قراءة المستخدم المخزَّن محلياً (psale_user) بشكل متزامن — احتياطي قبل جاهزية IndexedDB */
+function readStoredUser(): { userId: number | null; branchId: number | null } | null {
+  try {
+    const raw = localStorage.getItem('psale_user')
+    if (!raw) return null
+    const u = JSON.parse(raw) as { id?: number | null; branchId?: number | null }
+    if (typeof u.id !== 'number') return null
+    return { userId: u.id, branchId: u.branchId ?? null }
+  } catch {
+    return null
+  }
+}
+
 /** تحديد النطاق النشط (يُنادى عند تسجيل الدخول / تحديث الجلسة) */
 export async function setActiveScope(userId: number | null, branchId: number | null): Promise<void> {
   cachedUserId = userId
@@ -23,6 +36,12 @@ export async function setActiveScope(userId: number | null, branchId: number | n
   await metaSet(ACTIVE_BRANCH_KEY, branchId ?? null)
   const scope = `user:${userId ?? 'null'}:branch:${branchScope(branchId)}`
   await metaSet(LAST_ACCESS_PREFIX + scope, Date.now())
+}
+
+/** ضبط الذاكرة فوراً (بدون IndexedDB) — يُستدعى متزامناً عند تهيئة الجلسة قبل الرندر */
+export function setActiveScopeSync(userId: number | null, branchId: number | null): void {
+  cachedUserId = userId
+  cachedBranchId = branchId
 }
 
 /**
@@ -35,9 +54,32 @@ export async function getActiveScope(): Promise<{ userId: number | null; branchI
   }
   const userId = (await metaGet<number | null>(ACTIVE_USER_KEY)) ?? null
   const branchId = (await metaGet<number | null>(ACTIVE_BRANCH_KEY)) ?? null
+  // احتياطي متزامن: إذا لم تُكتب meta بعد (سباق عند فتح المتصفح دون اتصال) نقرأ localStorage
+  if (userId === null) {
+    const stored = readStoredUser()
+    if (stored) {
+      cachedUserId = stored.userId
+      cachedBranchId = stored.branchId
+      return stored
+    }
+  }
   cachedUserId = userId
   cachedBranchId = branchId
   return { userId, branchId }
+}
+
+/** نسخة متزامنة (للاستخدام في تهيئة الجلسة) — تعتمد الذاكرة ثم localStorage */
+export function getActiveScopeSync(): { userId: number | null; branchId: number | null } {
+  if (cachedUserId !== undefined) {
+    return { userId: cachedUserId, branchId: cachedBranchId ?? null }
+  }
+  const stored = readStoredUser()
+  if (stored) {
+    cachedUserId = stored.userId
+    cachedBranchId = stored.branchId
+    return stored
+  }
+  return { userId: null, branchId: null }
 }
 
 /** تطبيق العزل على أي مفتاح كاش: «key» → «key:user:{id}:branch:{branchId|global}» */

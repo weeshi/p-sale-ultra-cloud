@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { api, extractError } from '@/lib/api'
 import { cachedRead } from '@/lib/offline'
+import TabSelector from '@/components/TabSelector'
 import { useBranchFilter } from '@/contexts/BranchFilterContext'
 import { printDocument } from '@/lib/print'
 import { fmt, fmtDate, fmtMoney, toNum } from '@/lib/format'
@@ -1324,24 +1325,9 @@ export default function ReportsHub() {
 
   return (
     <div>
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 pt-2">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-t-lg px-4 py-2.5 text-sm transition-colors ${
-              tab === t.key
-                ? 'border-b-2 border-brand-600 bg-brand-50 font-semibold text-brand-800'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <span>{t.icon}</span>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabSelector tabs={TABS} active={tab} onChange={(k) => setTab(k as TabKey)} />
 
-      <div className="p-6">
+      <div className="p-4 lg:p-6">
         {tab === 'sales' && <SalesReport />}
         {tab === 'profit' && <ProfitReport />}
         {tab === 'customers' && <CustomersReport />}

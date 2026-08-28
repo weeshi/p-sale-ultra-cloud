@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import DataList, { type DataListColumn } from '@/components/DataList'
 import Modal from '@/components/Modal'
 import { api, extractError } from '@/lib/api'
 import { cachedRead, offlineWrite } from '@/lib/offline'
@@ -7,6 +8,7 @@ import { onRealtimeEvent, REALTIME_TRANSFER_EVENTS } from '@/lib/realtime'
 import { fmtDate, fmtMoney, toNum } from '@/lib/format'
 import { useBranchFilter } from '@/contexts/BranchFilterContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import type { Item, StockTransfer, Warehouse, Branch } from '@/types'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -145,12 +147,11 @@ export default function Transfers() {
   }, [branches, user])
 
   const filteredItems = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     return items.filter((it) => {
       if (!q) return true
-      const haystack = [it.itemCode, it.itemName, it.barcode]
-        .filter(Boolean).map((s) => String(s).toLowerCase()).join(' ')
-      return haystack.includes(q)
+      const haystack = buildSearchHaystack(it.itemCode, it.itemName, it.barcode)
+      return searchMatch(haystack, q)
     })
   }, [items, search])
 
@@ -295,7 +296,7 @@ export default function Transfers() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 lg:p-6">
       <div className="mb-4">
         <h1 className="text-2xl font-extrabold text-slate-800">تحويلات المخزون</h1>
         <p className="text-sm text-slate-500">طلبات بين الفروع والتحويلات</p>
@@ -521,6 +522,35 @@ function IncomingTab({
   const pending = transfers.filter((t) => t.status === 'requested')
   const inTransit = transfers.filter((t) => t.status === 'in_transit')
 
+  const pendingColumns: DataListColumn<StockTransfer>[] = [
+    { key: 'number', label: 'الرقم', render: (t) => <span className="font-mono text-xs">{t.transferNumber}</span> },
+    { key: 'from', label: 'من', render: (t) => t.fromWarehouse?.branch?.name ?? t.fromWarehouse?.name ?? '—' },
+    { key: 'date', label: 'التاريخ', render: (t) => fmtDate(t.transferDate) },
+    { key: 'items', label: 'الأصناف', render: (t) => <span className="text-center">{t.items?.length ?? 0}</span>, mobileHidden: true },
+    { key: 'notes', label: 'ملاحظات', render: (t) => <span className="max-w-[200px] truncate text-xs text-slate-500">{t.notes || '—'}</span>, mobileHidden: true },
+    {
+      key: 'actions', label: 'إجراءات',
+      render: (t) => (
+        <div className="flex gap-1">
+          <button onClick={(e) => { e.stopPropagation(); onReview(t) }} className="rounded px-2 py-1 text-xs text-brand-700 hover:bg-brand-50">📋 مراجعة</button>
+          <button onClick={(e) => { e.stopPropagation(); onCancel(t) }} disabled={saving} className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50">رفض</button>
+        </div>
+      ),
+      mobileHidden: true,
+    },
+  ]
+
+  const transitColumns: DataListColumn<StockTransfer>[] = [
+    { key: 'number', label: 'الرقم', render: (t) => <span className="font-mono text-xs">{t.transferNumber}</span> },
+    { key: 'from', label: 'من', render: (t) => t.fromWarehouse?.branch?.name ?? t.fromWarehouse?.name ?? '—' },
+    { key: 'date', label: 'التاريخ', render: (t) => fmtDate(t.transferDate) },
+    { key: 'items', label: 'الأصناف', render: (t) => <span className="text-center">{t.items?.length ?? 0}</span>, mobileHidden: true },
+    {
+      key: 'status', label: 'الحالة',
+      render: (t) => <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[t.status] ?? ''}`}>{STATUS_LABEL[t.status] ?? t.status}</span>,
+    },
+  ]
+
   if (transfers.length === 0) {
     return <div className="card text-center text-slate-400">لا توجد طلبات واردة</div>
   }
@@ -530,45 +560,8 @@ function IncomingTab({
       {pending.length > 0 && (
         <>
           <h3 className="mb-2 text-sm font-bold text-slate-700">⏳ بانتظار المراجعة ({pending.length})</h3>
-          <div className="card overflow-x-auto p-0 mb-4">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>الرقم</th>
-                  <th>من</th>
-                  <th>التاريخ</th>
-                  <th>الأصناف</th>
-                  <th>ملاحظات</th>
-                  <th>إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map((t) => (
-                  <tr key={t.id}>
-                    <td className="font-mono text-xs">{t.transferNumber}</td>
-                    <td>{t.fromWarehouse?.branch?.name ?? t.fromWarehouse?.name ?? '—'}</td>
-                    <td>{fmtDate(t.transferDate)}</td>
-                    <td>{t.items?.length ?? 0}</td>
-                    <td className="max-w-[200px] truncate text-xs text-slate-500">{t.notes || '—'}</td>
-                    <td>
-                      <button
-                        onClick={() => onReview(t)}
-                        className="rounded px-2 py-1 text-xs text-brand-700 hover:bg-brand-50"
-                      >
-                        📋 مراجعة
-                      </button>
-                      <button
-                        onClick={() => onCancel(t)}
-                        disabled={saving}
-                        className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                      >
-                        رفض
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mb-4">
+            <DataList data={pending} columns={pendingColumns} emptyText="لا توجد طلبات بانتظار المراجعة" keyFn={(t) => t.id} />
           </div>
         </>
       )}
@@ -576,34 +569,7 @@ function IncomingTab({
       {inTransit.length > 0 && (
         <>
           <h3 className="mb-2 text-sm font-bold text-slate-700">🚚 قيد الشحن ({inTransit.length})</h3>
-          <div className="card overflow-x-auto p-0">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>الرقم</th>
-                  <th>من</th>
-                  <th>التاريخ</th>
-                  <th>الأصناف</th>
-                  <th>الحالة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inTransit.map((t) => (
-                  <tr key={t.id}>
-                    <td className="font-mono text-xs">{t.transferNumber}</td>
-                    <td>{t.fromWarehouse?.branch?.name ?? t.fromWarehouse?.name ?? '—'}</td>
-                    <td>{fmtDate(t.transferDate)}</td>
-                    <td>{t.items?.length ?? 0}</td>
-                    <td>
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[t.status] ?? ''}`}>
-                        {STATUS_LABEL[t.status] ?? t.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataList data={inTransit} columns={transitColumns} emptyText="لا توجد طلبات قيد الشحن" keyFn={(t) => t.id} />
         </>
       )}
     </div>
@@ -621,63 +587,36 @@ function OutgoingTab({
   onCancel: (t: StockTransfer) => void
   saving: boolean
 }) {
+  const outgoingColumns: DataListColumn<StockTransfer>[] = [
+    { key: 'number', label: 'الرقم', render: (t) => <span className="font-mono text-xs">{t.transferNumber}</span> },
+    { key: 'to', label: 'إلى', render: (t) => t.toWarehouse?.branch?.name ?? t.toWarehouse?.name ?? '—' },
+    { key: 'date', label: 'التاريخ', render: (t) => fmtDate(t.transferDate) },
+    { key: 'items', label: 'الأصناف', render: (t) => <span className="text-center">{t.items?.length ?? 0}</span>, mobileHidden: true },
+    {
+      key: 'status', label: 'الحالة',
+      render: (t) => <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[t.status] ?? ''}`}>{STATUS_LABEL[t.status] ?? t.status}</span>,
+    },
+    {
+      key: 'actions', label: 'إجراءات',
+      render: (t) => (
+        <div className="flex gap-1">
+          {t.status === 'requested' && (
+            <button onClick={(e) => { e.stopPropagation(); onCancel(t) }} disabled={saving} className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50">إلغاء</button>
+          )}
+          {t.status === 'in_transit' && (
+            <button onClick={(e) => { e.stopPropagation(); onReceive(t) }} disabled={saving} className="rounded px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50">✅ استلام</button>
+          )}
+        </div>
+      ),
+      mobileHidden: true,
+    },
+  ]
+
   if (transfers.length === 0) {
     return <div className="card text-center text-slate-400">لم تُرسل أي طلبات بعد</div>
   }
 
-  return (
-    <div className="card overflow-x-auto p-0">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>الرقم</th>
-            <th>إلى</th>
-            <th>التاريخ</th>
-            <th>الأصناف</th>
-            <th>الحالة</th>
-            <th>إجراءات</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transfers.map((t) => (
-            <tr key={t.id}>
-              <td className="font-mono text-xs">{t.transferNumber}</td>
-              <td>{t.toWarehouse?.branch?.name ?? t.toWarehouse?.name ?? '—'}</td>
-              <td>{fmtDate(t.transferDate)}</td>
-              <td>{t.items?.length ?? 0}</td>
-              <td>
-                <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[t.status] ?? ''}`}>
-                  {STATUS_LABEL[t.status] ?? t.status}
-                </span>
-              </td>
-              <td>
-                <div className="flex gap-1">
-                  {t.status === 'requested' && (
-                    <button
-                      onClick={() => onCancel(t)}
-                      disabled={saving}
-                      className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                    >
-                      إلغاء
-                    </button>
-                  )}
-                  {t.status === 'in_transit' && (
-                    <button
-                      onClick={() => onReceive(t)}
-                      disabled={saving}
-                      className="rounded px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"
-                    >
-                      ✅ استلام
-                    </button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
+  return <DataList data={transfers} columns={outgoingColumns} emptyText="لم تُرسل أي طلبات بعد" keyFn={(t) => t.id} />
 }
 
 /* ═══════════════════════════════════════════════ */

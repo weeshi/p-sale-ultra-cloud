@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import DataList, { type DataListColumn } from '@/components/DataList'
 import Pagination, { DEFAULT_PAGE_SIZE, usePaginate } from '@/components/Pagination'
 import { api, extractError } from '@/lib/api'
 import { cachedRead, offlineWrite } from '@/lib/offline'
@@ -52,6 +53,7 @@ export default function StockMovements() {
   const [to, setTo] = useState('')
   const [itemId, setItemId] = useState('')
   const [warehouseId, setWarehouseId] = useState('')
+  const [movementType, setMovementType] = useState('')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE)
 
@@ -82,6 +84,7 @@ export default function StockMovements() {
       if (to) params.set('to', new Date(to + 'T23:59:59').toISOString())
       if (itemId) params.set('itemId', itemId)
       if (warehouseId) params.set('warehouseId', warehouseId)
+      if (movementType) params.set('movementType', movementType)
       if (selectedBranchId != null) params.set('branchId', String(selectedBranchId))
       const res = await cachedRead<StockMovementsResponse>(`stock-movements:${params.toString()}`, () =>
         api.get(`/reports/stock-movements?${params.toString()}`).then((r) => r.data), 'reports'
@@ -93,7 +96,7 @@ export default function StockMovements() {
     } finally {
       setLoading(false)
     }
-  }, [from, to, itemId, warehouseId, selectedBranchId])
+  }, [from, to, itemId, warehouseId, movementType, selectedBranchId])
 
   useEffect(() => {
     loadBase()
@@ -140,14 +143,91 @@ export default function StockMovements() {
     }
   }
 
+  const movementColumns: DataListColumn<StockMovement>[] = [
+    {
+      key: 'date',
+      label: 'التاريخ',
+      render: (mv) => fmtDate(mv.movementDate),
+    },
+    {
+      key: 'item',
+      label: 'الصنف',
+      render: (mv) => <span className="text-sm font-medium text-slate-800">{mv.item?.itemName ?? `#${mv.itemId}`}</span>,
+      mobileLabel: 'الصنف',
+    },
+    {
+      key: 'warehouse',
+      label: 'المخزن',
+      render: (mv) => mv.warehouse?.name ?? '—',
+      mobileHidden: true,
+    },
+    {
+      key: 'type',
+      label: 'النوع',
+      render: (mv) => (
+        <span className={`rounded-full px-2 py-0.5 text-xs ${MOVEMENT_STYLE[mv.movementType] ?? ''}`}>
+          {MOVEMENT_LABEL[mv.movementType] ?? mv.movementType}
+        </span>
+      ),
+    },
+    {
+      key: 'quantity',
+      label: 'الكمية',
+      render: (mv) => (
+        <span className={`font-semibold ${toNum(mv.quantity) > 0 ? 'text-green-700' : 'text-red-700'}`}>
+          {toNum(mv.quantity) > 0 ? `+${fmt(mv.quantity)}` : fmt(mv.quantity)}
+        </span>
+      ),
+    },
+    {
+      key: 'cost',
+      label: 'التكلفة',
+      render: (mv) => <span className="text-xs">{mv.totalCost != null ? fmtMoney(mv.totalCost) : '—'}</span>,
+      mobileHidden: true,
+    },
+    {
+      key: 'balance',
+      label: 'الرصيد بعد',
+      render: (mv) => <span className="text-xs">{mv.balanceAfter != null ? fmt(mv.balanceAfter) : '—'}</span>,
+      mobileHidden: true,
+    },
+    {
+      key: 'reference',
+      label: 'المرجع',
+      render: (mv) => (
+        <span className="text-xs text-slate-500">
+          {mv.referenceType ? `${mv.referenceType}${mv.referenceId ? ` #${mv.referenceId}` : ''}` : '—'}
+        </span>
+      ),
+      mobileHidden: true,
+    },
+    {
+      key: 'actions',
+      label: 'إجراءات',
+      render: (mv) => (
+        (mv.movementType === 'damaged' || mv.movementType === 'return_damaged') ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); reverseMovement(mv) }}
+            disabled={reversing}
+            className="whitespace-nowrap rounded px-2 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-50"
+            title="عكس التالف إلى الصالح"
+          >
+            ↩ عكس
+          </button>
+        ) : null
+      ),
+      mobileHidden: true,
+    },
+  ]
+
   return (
-    <div className="p-6">
+    <div className="p-4 lg:p-6">
       <div className="mb-4">
         <h1 className="text-2xl font-extrabold text-slate-800">حركات المخزون</h1>
         <p className="text-sm text-slate-500">سجل واردات وصادرات الأصناف عبر المخازن</p>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-6">
         <div>
           <label className="label">من</label>
           <input type="date" className="input" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1) }} />
@@ -171,6 +251,15 @@ export default function StockMovements() {
             <option value="">الكل</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">نوع الحركة</label>
+          <select className="input" value={movementType} onChange={(e) => { setMovementType(e.target.value); setPage(1) }}>
+            <option value="">الكل</option>
+            {Object.entries(MOVEMENT_LABEL).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
             ))}
           </select>
         </div>
@@ -213,60 +302,13 @@ export default function StockMovements() {
 
       {loading ? (
         <p className="py-16 text-center text-slate-400">جارٍ تحميل الحركات...</p>
-      ) : movements.length === 0 ? (
-        <div className="card text-center text-slate-400">لا توجد حركات مطابقة</div>
       ) : (
-        <div className="card overflow-x-auto p-0">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>التاريخ</th>
-                <th>الصنف</th>
-                <th>المخزن</th>
-                <th>النوع</th>
-                <th>الكمية</th>
-                <th>التكلفة</th>
-                <th>الرصيد بعد</th>
-                <th>المرجع</th>
-                <th className="w-16">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginated.map((mv) => (
-                <tr key={mv.id}>
-                  <td>{fmtDate(mv.movementDate)}</td>
-                  <td>{mv.item?.itemName ?? `#${mv.itemId}`}</td>
-                  <td>{mv.warehouse?.name ?? '—'}</td>
-                  <td>
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${MOVEMENT_STYLE[mv.movementType] ?? ''}`}>
-                      {MOVEMENT_LABEL[mv.movementType] ?? mv.movementType}
-                    </span>
-                  </td>
-                  <td className={`font-semibold ${toNum(mv.quantity) > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                    {toNum(mv.quantity) > 0 ? `+${fmt(mv.quantity)}` : fmt(mv.quantity)}
-                  </td>
-                  <td className="text-xs">{mv.totalCost != null ? fmtMoney(mv.totalCost) : '—'}</td>
-                  <td className="text-xs">{mv.balanceAfter != null ? fmt(mv.balanceAfter) : '—'}</td>
-                  <td className="text-xs text-slate-500">
-                    {mv.referenceType ? `${mv.referenceType}${mv.referenceId ? ` #${mv.referenceId}` : ''}` : '—'}
-                  </td>
-                  <td className="text-center">
-                    {(mv.movementType === 'damaged' || mv.movementType === 'return_damaged') && (
-                      <button
-                        onClick={() => reverseMovement(mv)}
-                        disabled={reversing}
-                        className="whitespace-nowrap rounded px-2 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-50"
-                        title="عكس التالف إلى الصالح"
-                      >
-                        ↩ عكس
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataList
+          data={paginated}
+          columns={movementColumns}
+          emptyText="لا توجد حركات مطابقة"
+          keyFn={(mv) => mv.id}
+        />
       )}
 
       {!loading && (

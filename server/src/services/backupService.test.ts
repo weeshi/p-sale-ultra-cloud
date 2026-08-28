@@ -39,7 +39,7 @@ describe('BackupService.createBackup', () => {
     ] as never)
     // أقدم mtime أكبر للملف الأحدث (من الطابع الزمني في الاسم)
     mockFs.statSync.mockImplementation((p: unknown) => {
-      const name = String(p).split(/[\\/]/).pop() || ''
+      const name = String(p).split(/[\\\/]/).pop() || ''
       const ts = parseInt(name.replace(/\D/g, '') || '0', 10)
       return { mtimeMs: ts, size: 1024 } as never
     })

@@ -10,6 +10,7 @@ import { fmt, fmtDate, fmtMoney, fmtUsd, toNum } from '@/lib/format'
 import { mailLink, printPurchaseInvoice, purchaseInvoiceText, waLink } from '@/lib/print'
 import { playAddSound } from '@/lib/sound'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import type { ExchangeRateResponse, Item, Party, PurchaseInvoice, Treasury, UnifiedPurchasesResponse, Warehouse } from '@/types'
 
 const PAYMENT_LABEL: Record<string, string> = { paid: 'مدفوعة', partial: 'جزئي', unpaid: 'غير مدفوعة' }
@@ -154,14 +155,11 @@ export default function LocalPurchaseInvoice() {
   const todayBankTotal = useMemo(() => todayInvoices.filter((i) => i.payType === 'banking').reduce((s, i) => s + toNum(i.paidAmount), 0), [todayInvoices])
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     return items.filter((it) => {
       if (!q) return true
-      const haystack = [it.itemCode, it.itemName, it.barcode, it.modelNumber]
-        .filter(Boolean)
-        .map((s) => String(s).toLowerCase())
-        .join(' ')
-      return haystack.includes(q)
+      const haystack = buildSearchHaystack(it.itemCode, it.itemName, it.barcode, it.modelNumber)
+      return searchMatch(haystack, q)
     })
   }, [items, search])
 

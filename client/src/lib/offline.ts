@@ -24,9 +24,83 @@ export function getDeviceId(): string {
   return id
 }
 
-export function isOnline(): boolean {
-  return typeof navigator !== 'undefined' ? navigator.onLine : true
+const HEALTH_CHECK_URL = '/api/health'
+const HEALTH_CHECK_INTERVAL_MS = 30_000
+const HEALTH_CHECK_TIMEOUT_MS = 5_000
+/** مهلة جلب الشبكة في cachedRead — يمنع تعليق الطلب عند اتصال بالراوتر دون إنترنت حقيقي */
+export const CACHED_READ_TIMEOUT_MS = 5_000
+
+/** null = غير مؤكدة بعد (تفاؤلي)، true = مؤكدة متصل، false = مؤكد منقطع */
+let realOnline: boolean | null = null
+let monitorStarted = false
+
+async function checkHealth(): Promise<boolean> {
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), HEALTH_CHECK_TIMEOUT_MS)
+    const res = await fetch(HEALTH_CHECK_URL, { cache: 'no-store', redirect: 'error', signal: ctrl.signal })
+    clearTimeout(timer)
+    return res?.ok ?? false
+  } catch {
+    return false
+  }
 }
+
+/**
+ * مراقبة الاتصال الفعلي: navigator.onLine وحده غير موثوق (يعود true بمجرد الاتصال
+ * بالراوتر رغم انقطاع الإنترنت). نجري فحصاً دورياً على /api/health ونحفّز أحداث
+ * online/offline لعكس الحالة الفعلية على الواجهة (SyncContext والبانرات).
+ */
+export function startConnectivityMonitor(): void {
+  if (monitorStarted || typeof window === 'undefined') return
+  monitorStarted = true
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) realOnline = false
+  const check = async () => {
+    const ok = await checkHealth()
+    if (ok && realOnline !== true) {
+      const wasOffline = realOnline === false
+      realOnline = true
+      if (wasOffline) window.dispatchEvent(new Event('online'))
+    } else if (!ok && realOnline !== false) {
+      realOnline = false
+      window.dispatchEvent(new Event('offline'))
+    }
+  }
+  void check()
+  setInterval(() => { void check() }, HEALTH_CHECK_INTERVAL_MS)
+  window.addEventListener('online', () => { void check() })
+  window.addEventListener('offline', () => { realOnline = false })
+}
+
+export function isOnline(): boolean {
+  if (typeof navigator === 'undefined') return true
+  return navigator.onLine && realOnline !== false
+}
+
+/** مهلة قصوى لأي عملية جلب: ترفض الطلب بعد ms لتجنب التعليق بلا إنترنت حقيقي */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('انتهت مهلة الطلب')), ms)
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value) },
+      (error) => { clearTimeout(timer); reject(error) }
+    )
+  })
+}
+
+/**
+ * جلب آمن:
+ * - اتصال مؤكد (realOnline === true): بلا مهلة قصيرة — الخادم قد يكون بطيئاً بشكل مشروع
+ * - اتصال غير مؤكد (realOnline === null، أول ثوانٍ من التشغيل): مهلة قصوى لمنع التعليق
+ * - منقطع (realOnline === false): لا يصل إلى هنا — الكاش يُعاد قبل أي جلب
+ */
+function safeFetch<T>(fetcher: () => Promise<T>): Promise<T> {
+  if (realOnline === null) return withTimeout(fetcher(), CACHED_READ_TIMEOUT_MS)
+  return fetcher()
+}
+
+// بدء المراقبة فور استيراد المحرك — يضمن دقة isOnline() من أول قراءة
+startConnectivityMonitor()
 
 /**
  * كتابة بأسلوب Offline-First:
@@ -75,14 +149,20 @@ export async function cachedRead<T>(key: string, fetcher: () => Promise<T>, enti
   if (entityName) {
     const currentVersion = await getCacheVersion(entityName)
     const cached = await cacheGetWithVersion<T>(nsKey)
-    if (cached !== undefined && cached.version === currentVersion && isOnline()) {
-      // الكاش حديث، نعيده فوراً ونحدث في الخلفية
-      fetcher().then((fresh) => cacheSetWithVersion(nsKey, fresh, currentVersion)).catch(() => {})
+    // دون اتصال: نعيد أي نسخة مخزنة مهما كان إصدارها — العرض أهم من الحداثة
+    if (cached !== undefined && !isOnline()) {
       return { data: cached.data, fromCache: true }
     }
-    // الكاش قديم أو لا يوجد — نجلب من الشبكة
+    if (cached !== undefined && cached.version === currentVersion) {
+      // الكاش حديث، نعيده فوراً ونحدث في الخلفية
+      safeFetch(fetcher)
+        .then((fresh) => cacheSetWithVersion(nsKey, fresh, currentVersion))
+        .catch(() => {})
+      return { data: cached.data, fromCache: true }
+    }
+    // الكاش قديم أو لا يوجد — نجلب من الشبكة (بمهلة ردع ثم نرجع للنسخة المخزنة)
     try {
-      const fresh = await fetcher()
+      const fresh = await safeFetch(fetcher)
       await cacheSetWithVersion(nsKey, fresh, currentVersion)
       return { data: fresh, fromCache: false }
     } catch {
@@ -91,14 +171,14 @@ export async function cachedRead<T>(key: string, fetcher: () => Promise<T>, enti
     }
   }
 
-  // بدون entityName: السلوك الأصلي (بدون فحص إصدار)
+  // بدون entityName: السلوك الأصلي (بدون فحص إصدار) مع مهلة قصوى
   const cached = await cacheGet<T>(nsKey)
   if (!isOnline()) {
     if (cached !== undefined) return { data: cached, fromCache: true }
     throw new Error('لا يوجد اتصال ولا بيانات مخزنة')
   }
   try {
-    const fresh = await fetcher()
+    const fresh = await safeFetch(fetcher)
     await cacheSet(nsKey, fresh)
     return { data: fresh, fromCache: false }
   } catch {

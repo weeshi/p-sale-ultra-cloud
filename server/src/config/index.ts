@@ -40,4 +40,9 @@ export const CONFIG = {
     batchSize: parseInt(process.env.SYNC_BATCH_SIZE || '100', 10),
     intervalMs: parseInt(process.env.SYNC_INTERVAL_MS || '30000', 10),
   },
+
+  license: {
+    publicKeyPath: process.env.LICENSE_PUBLIC_KEY_PATH || '../.keys/public_key.pem',
+    trialDays: parseInt(process.env.LICENSE_TRIAL_DAYS || '30', 10),
+  },
 }

@@ -3,6 +3,7 @@ import { api, extractError } from '@/lib/api'
 import { cachedRead } from '@/lib/offline'
 import { useBranchFilter } from '@/contexts/BranchFilterContext'
 import { fmt, fmtMoney, toNum } from '@/lib/format'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import type { StockValuationResponse, Warehouse } from '@/types'
 
 export default function StockValuation() {
@@ -46,11 +47,12 @@ export default function StockValuation() {
   }, [selectedBranchId])
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     if (!q) return data.items
-    return data.items.filter((it) =>
-      [it.itemCode, it.itemName].filter(Boolean).some((s) => String(s).toLowerCase().includes(q))
-    )
+    return data.items.filter((it) => {
+      const haystack = buildSearchHaystack(it.itemCode, it.itemName)
+      return searchMatch(haystack, q)
+    })
   }, [data.items, search])
 
   const totalValue = useMemo(() => filtered.reduce((s, it) => s + toNum(it.totalValue), 0), [filtered])

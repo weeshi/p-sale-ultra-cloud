@@ -28,6 +28,8 @@ import barcodeRoutes from './routes/barcode'
 import notificationRoutes from './routes/notifications'
 import exchangeRoutes from './routes/exchange'
 import settingsRoutes from './routes/settings'
+import licenseRoutes from './routes/license'
+import { checkLicense } from './middleware/license'
 
 const app = express()
 const server = http.createServer(app)
@@ -94,6 +96,12 @@ app.use('/api/barcode', barcodeRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/exchange', exchangeRoutes)
 app.use('/api/settings', settingsRoutes)
+app.use('/api/license', licenseRoutes)
+
+// License check middleware — enforces valid license on all business routes
+// Applied AFTER auth routes (login/setup must work without license)
+// Applied BEFORE apiLimiter (license check is more critical than rate limiting)
+app.use('/api', checkLicense)
 
 app.use('/api', apiLimiter)
 

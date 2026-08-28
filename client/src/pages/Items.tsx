@@ -5,6 +5,7 @@ import CatalogSettings from '@/components/CatalogSettings'
 import { api, extractError } from '@/lib/api'
 import { cachedRead, offlineWrite } from '@/lib/offline'
 import { fmt, fmtMoney, toNum } from '@/lib/format'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import type { Attribute, Brand, Category, Item, ItemsResponse, Unit, Warehouse } from '@/types'
 
 interface FormState {
@@ -136,14 +137,11 @@ export default function Items() {
   }, [warehouseFilter])
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     return items.filter((it) => {
       if (q) {
-        const haystack = [it.itemCode, it.itemName, it.barcode, it.modelNumber]
-          .filter(Boolean)
-          .map((s) => String(s).toLowerCase())
-          .join(' ')
-        if (!haystack.includes(q)) return false
+        const haystack = buildSearchHaystack(it.itemCode, it.itemName, it.barcode, it.modelNumber)
+        if (!searchMatch(haystack, q)) return false
       }
       if (catFilter && String(it.categoryId ?? '') !== catFilter) return false
       if (brandFilter && String(it.brandId ?? '') !== brandFilter) return false

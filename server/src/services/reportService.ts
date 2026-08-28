@@ -62,15 +62,17 @@ export class ReportService {
     to?: Date
     itemId?: number
     warehouseId?: number
+    movementType?: string
     branchId?: number
   }) {
-    const { companyId, from, to, itemId, warehouseId, branchId } = params
+    const { companyId, from, to, itemId, warehouseId, movementType, branchId } = params
 
     const where: any = { companyId }
     if (from) where.movementDate = { ...(where.movementDate || {}), gte: from }
     if (to) where.movementDate = { ...(where.movementDate || {}), lte: to }
     if (itemId) where.itemId = itemId
     if (warehouseId) where.warehouseId = warehouseId
+    if (movementType) where.movementType = movementType
     if (branchId) where.warehouse = { branchId }
 
     const movements = await prisma.stockMovement.findMany({

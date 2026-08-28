@@ -11,6 +11,7 @@ import { fmt, fmtDate, fmtMoney, toNum } from '@/lib/format'
 import { invoiceText, mailLink, printInvoice, waLink } from '@/lib/print'
 import { playAddSound } from '@/lib/sound'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { searchMatch, buildSearchHaystack } from '@/lib/search'
 import type { Item, Party, Quote, SaleInvoice, Treasury, Warehouse } from '@/types'
 
 interface CartLine {
@@ -149,15 +150,12 @@ export default function Sales() {
   }, [payType, treasuries])
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = search.trim()
     return items.filter((it) => {
       if (it.isActive === false) return false
       if (!q) return true
-      const haystack = [it.itemCode, it.itemName, it.barcode, it.modelNumber]
-        .filter(Boolean)
-        .map((s) => String(s).toLowerCase())
-        .join(' ')
-      return haystack.includes(q)
+      const haystack = buildSearchHaystack(it.itemCode, it.itemName, it.barcode, it.modelNumber)
+      return searchMatch(haystack, q)
     })
   }, [items, search])
 
@@ -480,7 +478,7 @@ export default function Sales() {
           ) : filtered.length === 0 ? (
             <div className="card text-center text-slate-400">لا توجد أصناف مطابقة</div>
           ) : (
-            <div className="grid max-h-[28rem] grid-cols-2 gap-2 overflow-y-auto pb-2 md:grid-cols-3">
+            <div className="max-h-[33vh] overflow-y-auto rounded-xl border border-slate-200 bg-white">
               {filtered.map((it) => {
                 const avail = availableStock(it)
                 const out = !it.isService && avail <= 0
@@ -489,25 +487,29 @@ export default function Sales() {
                     key={it.id}
                     onClick={() => addToCart(it)}
                     disabled={out}
-                    className={`card flex flex-col gap-1 p-3 text-right transition-colors ${
+                    className={`list-row w-full text-right transition-colors ${
                       out
                         ? 'cursor-not-allowed opacity-50'
-                        : 'hover:border-brand-400 hover:shadow-md'
+                        : 'hover:bg-brand-50 active:bg-brand-100'
                     }`}
                   >
-                    <span className="text-sm font-semibold text-slate-800">{it.itemName}</span>
-                    <span className="font-mono text-xs text-slate-400">{it.itemCode}{it.barcode ? ` · ${it.barcode}` : ''}</span>
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="font-bold text-brand-700">{fmtMoney(it.salePrice)}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-slate-800">{it.itemName}</div>
+                      <div className="truncate font-mono text-xs text-slate-400">
+                        {it.itemCode}{it.barcode ? ` · ${it.barcode}` : ''}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
                       {it.isService ? (
-                        <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">خدمة</span>
+                        <span className="badge-purple">خدمة</span>
                       ) : it.trackSerial ? (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">سيريال</span>
+                        <span className="badge-blue">سيريال</span>
+                      ) : out ? (
+                        <span className="badge-red">نفد</span>
                       ) : (
-                        <span className={`rounded-full px-2 py-0.5 text-xs ${out ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
-                          {out ? 'نفد' : `المخزون: ${fmt(avail, 0)}`}
-                        </span>
+                        <span className="text-xs text-slate-500">{fmt(avail, 0)}</span>
                       )}
+                      <span className="text-sm font-bold text-brand-700">{fmtMoney(it.salePrice)}</span>
                     </div>
                   </button>
                 )
@@ -564,82 +566,71 @@ export default function Sales() {
             </div>
 
             {cart.length === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-400">السلة فارغة — اختر الأصناف من اليسار</p>
+              <p className="py-6 text-center text-sm text-slate-400">السلة فارغة — اختر الأصناف من القائمة</p>
             ) : (
-              <div className="max-h-64 overflow-y-auto">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>الصنف</th>
-                      <th className="w-14">الكمية</th>
-                      <th className="w-24">السعر</th>
-                      <th className="w-20">الإجمالي</th>
-                      {isReturn && <th className="w-20">كـ تالف</th>}
-                      <th className="w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cart.map((l, i) => (
-                      <tr key={l.item.id}>
-                        <td>
-                          <div className="text-xs font-medium text-slate-800">{l.item.itemName}</div>
-                          {!isReturn && l.item.trackSerial && (
-                            <button
-                              onClick={() => setSerialPick(i)}
-                              className={`mt-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                                l.serials.length === l.quantity
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-amber-100 text-amber-700'
-                              }`}
-                            >
-                              {l.serials.length === l.quantity
-                                ? `سيريال: ${l.serials.length} ✓`
-                                : `اختيار سيريال (${l.serials.length}/${l.quantity})`}
-                            </button>
-                          )}
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={1}
-                            className="input px-2 py-1"
-                            value={l.quantity}
-                            onChange={(e) => updateLine(i, { quantity: Math.max(1, toNum(e.target.value)) })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            className="input px-2 py-1"
-                            value={l.unitPrice}
-                            onChange={(e) => updateLine(i, { unitPrice: toNum(e.target.value) })}
-                          />
-                        </td>
-                        <td className="text-xs font-semibold">{fmtMoney(l.unitPrice * l.quantity - l.discount)}</td>
-                        {isReturn && (
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={l.returnAsDamaged}
-                              onChange={(e) => updateLine(i, { returnAsDamaged: e.target.checked })}
-                              className="h-4 w-4 accent-brand-700"
-                              title="إعادة الصنف للمخزون كتالف (لا يُرجع للصالح)"
-                            />
-                          </td>
-                        )}
-                        <td>
-                          <button
-                            onClick={() => removeLine(i)}
-                            className="rounded p-1 text-red-500 hover:bg-red-50"
-                            title="حذف"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200">
+                {cart.map((l, i) => (
+                  <div key={l.item.id} className="cart-item">
+                    {/* السطر الأول: اسم الصنف + زر الحذف */}
+                    <div className="flex items-center justify-between">
+                      <span className="cart-item-name truncate">{l.item.itemName}</span>
+                      <button
+                        onClick={() => removeLine(i)}
+                        className="btn-icon text-red-400 hover:text-red-600"
+                        title="حذف"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {/* السطر الثاني: الكمية + السعر + الإجمالي */}
+                    <div className="cart-item-detail">
+                      <span className="text-slate-500">الكمية:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        className="input-sm w-16 text-center"
+                        value={l.quantity}
+                        onChange={(e) => updateLine(i, { quantity: Math.max(1, toNum(e.target.value)) })}
+                      />
+                      <span className="text-slate-500">السعر:</span>
+                      <input
+                        type="number"
+                        className="input-sm w-20 text-center"
+                        value={l.unitPrice}
+                        onChange={(e) => updateLine(i, { unitPrice: toNum(e.target.value) })}
+                      />
+                      <span className="ms-auto font-bold text-slate-800">{fmtMoney(l.unitPrice * l.quantity - l.discount)}</span>
+                    </div>
+                    {/* سطر إضافي: سيريال أو مرتجع كتالف */}
+                    {!isReturn && l.item.trackSerial && (
+                      <div className="mt-1">
+                        <button
+                          onClick={() => setSerialPick(i)}
+                          className={`badge ${
+                            l.serials.length === l.quantity
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}
+                        >
+                          {l.serials.length === l.quantity
+                            ? `سيريال: ${l.serials.length} ✓`
+                            : `اختيار سيريال (${l.serials.length}/${l.quantity})`}
+                        </button>
+                      </div>
+                    )}
+                    {isReturn && (
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={l.returnAsDamaged}
+                          onChange={(e) => updateLine(i, { returnAsDamaged: e.target.checked })}
+                          className="h-3.5 w-3.5 accent-brand-700"
+                        />
+                        <span className="text-xs text-slate-500">كـ تالف</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 

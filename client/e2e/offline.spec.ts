@@ -40,7 +40,7 @@ test.describe('وضع عدم الاتصال (Offline-First)', () => {
     await selectByLabel(page, 'المخزن *', env.warehouseName)
     await itemButton.click()
     await expect(page.getByText('السلة فارغة')).not.toBeVisible()
-    await selectByLabel(page, 'الخزينة/الحساب *', env.treasuryName)
+    await selectByLabel(page, 'الخزينة *', env.treasuryName)
     await fillByLabel(page, 'ملاحظات', uniqueNote)
 
     // ==== قطع الاتصال ====

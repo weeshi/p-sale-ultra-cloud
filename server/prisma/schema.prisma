@@ -56,6 +56,7 @@ model Company {
   rmas             Rma[]
   sequences        Sequence[]
   bankReconciliations BankReconciliation[]
+  licenses            License[]
 
   @@map("companies")
 }
@@ -1178,4 +1179,39 @@ model SyncLog {
   company Company @relation(fields: [companyId], references: [id])
 
   @@map("sync_logs")
+}
+
+// ============================================
+// نظام الترخيص (License System)
+// Ed25519 + Hardware Binding
+// ============================================
+model License {
+  id          Int      @id @default(autoincrement())
+  companyId   Int      @map("company_id")
+  licenseKey  String   @unique @map("license_key") @db.VarChar(255)
+  tier        String   @db.VarChar(50) // trial | basic | pro | enterprise
+  hwHash      String   @map("hw_hash") @db.VarChar(255) // CPU+MAC fingerprint (SHA256)
+  activatedAt DateTime @default(now()) @map("activated_at")
+  expiresAt   DateTime? @map("expires_at")
+  maxUsers    Int?     @map("max_users")
+  maxBranches Int?     @map("max_branches")
+  isActive    Boolean  @default(true) @map("is_active")
+  notes       String?  @db.Text
+  features    LicenseFeature[]
+  company     Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([licenseKey])
+  @@map("licenses")
+}
+
+model LicenseFeature {
+  id        Int     @id @default(autoincrement())
+  licenseId Int     @map("license_id")
+  feature   String  @db.VarChar(100) // e.g. "accounting", "inventory", "multi-branch"
+  enabled   Boolean @default(true)
+  license   License @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+
+  @@unique([licenseId, feature])
+  @@map("license_features")
 }
