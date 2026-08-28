@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { api, extractError } from '@/lib/api'
 import { cachedRead } from '@/lib/offline'
 import TabSelector from '@/components/TabSelector'
+import BranchScopeBar from '@/components/BranchScopeBar'
 import { useBranchFilter } from '@/contexts/BranchFilterContext'
 import { printDocument } from '@/lib/print'
 import { fmt, fmtDate, fmtMoney, toNum } from '@/lib/format'
@@ -1328,6 +1329,7 @@ export default function ReportsHub() {
       <TabSelector tabs={TABS} active={tab} onChange={(k) => setTab(k as TabKey)} />
 
       <div className="p-4 lg:p-6">
+        <BranchScopeBar />
         {tab === 'sales' && <SalesReport />}
         {tab === 'profit' && <ProfitReport />}
         {tab === 'customers' && <CustomersReport />}
