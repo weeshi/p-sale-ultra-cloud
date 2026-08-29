@@ -77,4 +77,62 @@ if [[ -n "$REMOTE_DIR" ]]; then
   log "تم نسخ إلى $REMOTE_DIR"
 fi
 
+# =====================================================================
+# التشفير + الرفع الخارجي (اختياري — يعمل عند وجود backup-encryption.env)
+# =====================================================================
+ENC_ENV="$ROOT_DIR/scripts/backup-encryption.env"
+if [[ -f "$ENC_ENV" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENC_ENV"
+  set +a
+
+  if [[ -n "${BACKUP_PASSPHRASE:-}" ]]; then
+    OPSSL="${OPENSSL_BIN:-openssl}"
+    if command -v "$OPSSL" >/dev/null 2>&1; then
+      ENC_OUT="$OUT.enc"
+      if ! "$OPSSL" enc -aes-256-cbc -pbkdf2 -iter 100000 -salt \
+           -pass "pass:$BACKUP_PASSPHRASE" -in "$OUT" -out "$ENC_OUT" 2>/dev/null; then
+        log "فشل تشفير النسخة: $ENC_OUT"
+        exit 1
+      fi
+      log "تم التشفير: $ENC_OUT"
+
+      if [[ -n "${RCLONE_REMOTE:-}" ]] && command -v rclone >/dev/null 2>&1; then
+        REMOTE_DIR2="${RCLONE_REMOTE_DIR:-p-sale-backups}"
+        TARGET="${RCLONE_REMOTE}:${REMOTE_DIR2}"
+        if rclone listremotes 2>/dev/null | grep -q "^${RCLONE_REMOTE}:$"; then
+          if rclone copy "$ENC_OUT" "$TARGET" --log-level ERROR; then
+            log "تم رفع النسخة المشفرة إلى $TARGET"
+            KEEP="${RCLONE_KEEP_DAYS:-30}"
+            rclone lsf "$TARGET" --files-only --include 'psale_*.sql.gz.enc' 2>/dev/null | while read -r f; do
+              if [[ "$f" =~ psale_([0-9]{4})([0-9]{2})([0-9]{2})_([0-9]{2})([0-9]{2})([0-9]{2})\.sql\.gz\.enc ]]; then
+                if date -d "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:${BASH_REMATCH[6]}" +%s 2>/dev/null \
+                  | xargs -I{} test {} -lt "$(date -d "-$KEEP days" +%s)"; then
+                  log "حذف قديم عن الـ Remote: $f"
+                  rclone deletefile "$TARGET/$f" --log-level ERROR 2>/dev/null
+                fi
+              fi
+            done
+          else
+            log "فشل رفع النسخة المشفرة إلى $TARGET"
+            exit 1
+          fi
+        else
+          log "remote '$RCLONE_REMOTE' غير موجود في rclone — لم تُرفع النسخة (أنشئه بـ: rclone config)"
+        fi
+      else
+        log "rclone غير متوفر أو RCLONE_REMOTE غير معرّف — تم التشفير محلياً دون رفع"
+      fi
+    else
+      log "openssl غير موجود — لا يمكن تشفير النسخة"
+      exit 1
+    fi
+  else
+    log "BACKUP_PASSPHRASE فارغ — بدون تشفير"
+  fi
+else
+  log "لا يوجد scripts/backup-encryption.env — بدون تشفير (انظر backup-encryption.env.example)"
+fi
+
 log "اكتمل النسخ الاحتياطي بنجاح"

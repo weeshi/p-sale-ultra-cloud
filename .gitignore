@@ -45,6 +45,7 @@ test-results/
 
 # Backup env files
 server/.env.bak.*
+scripts/backup-encryption.env
 
 # SQL backups (dumps only; Prisma migration.sql files must remain tracked)
 *.sql
