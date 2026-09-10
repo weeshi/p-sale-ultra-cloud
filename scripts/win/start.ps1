@@ -13,10 +13,10 @@ if (-not $pm2) {
     exit 1
 }
 
-# Check if already running
-$running = pm2 jlist 2>$null | ConvertFrom-Json
-$serverRunning = $running | Where-Object { $_.name -eq "psale-server" -and $_.pm2_env.status -eq "online" }
-$clientRunning = $running | Where-Object { $_.name -eq "psale-client" -and $_.pm2_env.status -eq "online" }
+# Check if already running using pm2 list text output
+$pm2list = pm2 list 2>$null
+$serverRunning = $pm2list | Select-String "psale-server" | Select-String "online"
+$clientRunning = $pm2list | Select-String "psale-client" | Select-String "online"
 
 if ($serverRunning -and $clientRunning) {
     Write-Host "OK  Server   : online (port 3005)" -ForegroundColor Green
@@ -42,9 +42,9 @@ $elapsed = 0
 while ($elapsed -lt $maxWait) {
     Start-Sleep -Seconds 1
     $elapsed++
-    $status = pm2 jlist 2>$null | ConvertFrom-Json
-    $srv = $status | Where-Object { $_.name -eq "psale-server" -and $_.pm2_env.status -eq "online" }
-    $cli = $status | Where-Object { $_.name -eq "psale-client" -and $_.pm2_env.status -eq "online" }
+    $pm2list = pm2 list 2>$null
+    $srv = $pm2list | Select-String "psale-server" | Select-String "online"
+    $cli = $pm2list | Select-String "psale-client" | Select-String "online"
     if ($srv -and $cli) { break }
 }
 

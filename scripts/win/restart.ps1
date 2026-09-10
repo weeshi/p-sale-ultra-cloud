@@ -30,9 +30,9 @@ $elapsed = 0
 while ($elapsed -lt $maxWait) {
     Start-Sleep -Seconds 1
     $elapsed++
-    $status = pm2 jlist 2>$null | ConvertFrom-Json
-    $srv = $status | Where-Object { $_.name -eq "psale-server" -and $_.pm2_env.status -eq "online" }
-    $cli = $status | Where-Object { $_.name -eq "psale-client" -and $_.pm2_env.status -eq "online" }
+    $pm2list = pm2 list 2>$null
+    $srv = $pm2list | Select-String "psale-server" | Select-String "online"
+    $cli = $pm2list | Select-String "psale-client" | Select-String "online"
     if ($srv -and $cli) { break }
 }
 

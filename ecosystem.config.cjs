@@ -20,7 +20,8 @@ module.exports = {
     {
       name: 'psale-client',
       cwd: './client',
-      script: './node_modules/vite/bin/vite.js',
+      script: './node_modules/serve/build/main.js',
+      args: '-s dist -l 5175',
       interpreter: 'node',
       autorestart: true,
       max_restarts: 10,

@@ -4,8 +4,12 @@ import type { ApiError } from '@/types'
 const TOKEN_KEY = 'psale_access_token'
 const REFRESH_KEY = 'psale_refresh_token'
 
+// استخدام متغير بيئة أو القيمة الافتراضية للإنتاج
+// Vite يستبدل import.meta.env.VITE_API_BASE_URL عند البناء
+const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3005/api'
+
 export const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   timeout: 30000,
 })
 

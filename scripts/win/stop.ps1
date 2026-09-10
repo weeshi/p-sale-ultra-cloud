@@ -11,10 +11,10 @@ if (-not $pm2) {
     exit 1
 }
 
-# Check if anything is running
-$running = pm2 jlist 2>$null | ConvertFrom-Json
-$serverRunning = $running | Where-Object { $_.name -eq "psale-server" -and $_.pm2_env.status -eq "online" }
-$clientRunning = $running | Where-Object { $_.name -eq "psale-client" -and $_.pm2_env.status -eq "online" }
+# Check if anything is running using pm2 list text output
+$pm2list = pm2 list 2>$null
+$serverRunning = $pm2list | Select-String "psale-server" | Select-String "online"
+$clientRunning = $pm2list | Select-String "psale-client" | Select-String "online"
 
 if (-not $serverRunning -and -not $clientRunning) {
     Write-Host "All services already stopped." -ForegroundColor Yellow
@@ -30,9 +30,9 @@ pm2 stop psale-client 2>&1 | Out-Null
 
 # Verify
 Start-Sleep -Seconds 2
-$final = pm2 jlist 2>$null | ConvertFrom-Json
-$srv = $final | Where-Object { $_.name -eq "psale-server" -and $_.pm2_env.status -eq "online" }
-$cli = $final | Where-Object { $_.name -eq "psale-client" -and $_.pm2_env.status -eq "online" }
+$final = pm2 list 2>$null
+$srv = $final | Select-String "psale-server" | Select-String "online"
+$cli = $final | Select-String "psale-client" | Select-String "online"
 
 Write-Host ""
 if (-not $srv -and -not $cli) {
