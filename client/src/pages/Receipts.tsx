@@ -58,6 +58,7 @@ export default function Receipts() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [type, setType] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('')
   const [treasuryId, setTreasuryId] = useState(0)
   const [partyId, setPartyId] = useState(0)
   const [page, setPage] = useState(1)
@@ -100,9 +101,10 @@ export default function Receipts() {
       if (from) params.from = from
       if (to) params.to = to
       if (type) params.type = type
+      if (paymentMethod) params.paymentMethod = paymentMethod
       if (treasuryId) params.treasuryId = treasuryId
       if (partyId) params.partyId = partyId
-      const key = `receipts:${selectedBranchId ?? 'all'}:${page}:${from}:${to}:${type}:${treasuryId}:${partyId}:${version}`
+      const key = `receipts:${selectedBranchId ?? 'all'}:${page}:${from}:${to}:${type}:${paymentMethod}:${treasuryId}:${partyId}:${version}`
       const res = await cachedRead<ReceiptsResponse>(key, () =>
         api.get('/treasury/receipts', { params }).then((r) => r.data), 'treasuries'
       )
@@ -112,7 +114,7 @@ export default function Receipts() {
     } finally {
       setLoading(false)
     }
-  }, [page, from, to, type, treasuryId, partyId, version, selectedBranchId])
+  }, [page, from, to, type, paymentMethod, treasuryId, partyId, version, selectedBranchId])
 
   useEffect(() => {
     load()
@@ -248,6 +250,16 @@ export default function Receipts() {
           </select>
         </div>
         <div>
+          <label className="label">طريقة الدفع</label>
+          <select className="input" value={paymentMethod} onChange={(e) => { setPaymentMethod(e.target.value); setPage(1) }}>
+            <option value="">الكل</option>
+            <option value="cash">نقدي</option>
+            <option value="check">شيك</option>
+            <option value="transfer">تحويل بنكي</option>
+            <option value="card">بطاقة</option>
+          </select>
+        </div>
+        <div>
           <label className="label">الخزينة</label>
           <select className="input" value={treasuryId} onChange={(e) => { setTreasuryId(Number(e.target.value)); setPage(1) }}>
             <option value={0}>الكل</option>
@@ -265,10 +277,10 @@ export default function Receipts() {
             ))}
           </select>
         </div>
-        {(from || to || type || treasuryId || partyId) && (
+        {(from || to || type || paymentMethod || treasuryId || partyId) && (
           <button
             className="btn-secondary"
-            onClick={() => { setFrom(''); setTo(''); setType(''); setTreasuryId(0); setPartyId(0); setPage(1) }}
+            onClick={() => { setFrom(''); setTo(''); setType(''); setPaymentMethod(''); setTreasuryId(0); setPartyId(0); setPage(1) }}
           >
             ✕ مسح الفلاتر
           </button>

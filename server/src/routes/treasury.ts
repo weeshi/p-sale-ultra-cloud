@@ -67,7 +67,7 @@ router.post('/', authorize('admin', 'manager'), async (req, res) => {
 // سندات القبض والصرف
 router.get('/receipts', async (req, res) => {
   try {
-    const { from, to, type, treasuryId, partyId, page = 1, limit = 50 } = req.query
+    const { from, to, type, treasuryId, partyId, paymentMethod, page = 1, limit = 50 } = req.query
     const where: any = { companyId: req.companyId }
 
     // فلتر الفرع: سوبر أدمن يرى كل شيء، مستخدم مربوط يرى فرعه فقط
@@ -84,6 +84,7 @@ router.get('/receipts', async (req, res) => {
     if (type) where.receiptType = String(type)
     if (treasuryId) where.treasuryId = Number(treasuryId)
     if (partyId) where.partyId = Number(partyId)
+    if (paymentMethod) where.paymentMethod = String(paymentMethod)
 
     const [receipts, total] = await Promise.all([
       prisma.receipt.findMany({

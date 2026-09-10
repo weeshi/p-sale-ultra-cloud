@@ -166,9 +166,10 @@ async function ensureCompany() {
     const bankAccount = accountsByCode.get('1104')
     const branches = await tx.branch.findMany({ where: { companyId: company.id } })
     for (const branch of branches) {
-      // Skip if treasury already exists (idempotent)
-      const existing = await tx.treasury.findFirst({ where: { companyId: company.id, branchId: branch.id } })
-      if (!existing) {
+      const cashExists = await tx.treasury.findFirst({
+        where: { companyId: company.id, branchId: branch.id, treasuryType: 'cash' },
+      })
+      if (!cashExists) {
         await tx.treasury.create({
           data: {
             companyId: company.id,
@@ -179,6 +180,11 @@ async function ensureCompany() {
             accountId: cashAccount?.id,
           },
         })
+      }
+      const bankExists = await tx.treasury.findFirst({
+        where: { companyId: company.id, branchId: branch.id, treasuryType: 'bank' },
+      })
+      if (!bankExists) {
         await tx.treasury.create({
           data: {
             companyId: company.id,
