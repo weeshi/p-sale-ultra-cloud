@@ -1,0 +1,15 @@
+{
+  "name": "p-sale-ultra-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "description": "P-Sale Ultra Cloud — ERP (offline-first PWA, multi-branch, dual-currency). Convenience scripts that delegate to server/",
+  "scripts": {
+    "license:issuer": "npm --prefix server run license:issuer",
+    "license:sign": "npm --prefix server run license:sign",
+    "migrate:vendors": "npm --prefix server run migrate:vendors",
+    "test": "npm --prefix server run test",
+    "test:integration": "npm --prefix server run test:integration",
+    "typecheck": "npm --prefix server run -- tsc --noEmit",
+    "build": "npm --prefix client run build"
+  }
+}
