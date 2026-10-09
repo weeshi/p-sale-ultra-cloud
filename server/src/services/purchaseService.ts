@@ -5,6 +5,30 @@ import { sequenceService } from './sequenceService'
 import { generateNumber, toDecimal, absorbedAverageCost } from '../../../shared/utils'
 import { JOURNAL_TYPES } from '../../../shared/constants'
 
+// Helper: validate that a resource belongs to the user's branch (or user has canViewAllBranches)
+async function validateBranchOwnership(tx: any, resourceType: 'warehouse' | 'treasury', resourceId: number, branchId: number | null | undefined): Promise<void> {
+  if (!branchId) return // No branch restriction (super admin or global user)
+  
+  let resourceBranchId: number | null = null
+  
+  switch (resourceType) {
+    case 'warehouse':
+      const warehouse = await tx.warehouse.findUnique({ where: { id: resourceId }, select: { branchId: true } })
+      if (!warehouse) throw new Error(`المخزن رقم ${resourceId} غير موجود`)
+      resourceBranchId = warehouse.branchId
+      break
+    case 'treasury':
+      const treasury = await tx.treasury.findUnique({ where: { id: resourceId }, select: { branchId: true } })
+      if (!treasury) throw new Error(`الخزينة رقم ${resourceId} غير موجودة`)
+      resourceBranchId = treasury.branchId
+      break
+  }
+  
+  if (resourceBranchId !== null && resourceBranchId !== branchId) {
+    throw new Error(`${resourceType === 'warehouse' ? 'المخزن' : 'الخزينة'} لا يتبع فرع المستخدم`)
+  }
+}
+
 // خدمة المشتريات: أوامر الشراء، الاستيراد، تكلفة الوصول
 export class PurchaseService {
   /**
@@ -56,6 +80,9 @@ export class PurchaseService {
     } = data
 
     return prisma.$transaction(async (tx) => {
+      // Validate branch ownership for resources
+      if (targetWarehouseId) await validateBranchOwnership(tx, 'warehouse', targetWarehouseId, branchId)
+      
       const subtotalUsd = items.reduce((s, i) => s + i.unitPriceUsd * i.quantity, 0)
       const totalUsd = subtotalUsd - discount + shippingCost + customsCost + insuranceCost + otherCosts
 
@@ -148,6 +175,10 @@ export class PurchaseService {
       if (po.status === 'cancelled') throw new Error('أمر الشراء ملغي')
       if (po.status === 'received') throw new Error('أمر الشراء تم استلامه مسبقاً')
 
+      // Validate branch ownership for resources
+      await validateBranchOwnership(tx, 'warehouse', warehouseId, po.branchId ?? undefined)
+      if (treasuryId) await validateBranchOwnership(tx, 'treasury', treasuryId, po.branchId ?? undefined)
+      
       const exchangeRate = po.exchangeRate.toNumber()
       const isUsd = po.currency === 'USD'
       const rate = exchangeRate || 1

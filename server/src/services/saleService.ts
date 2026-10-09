@@ -5,6 +5,30 @@ import { generateNumber, toDecimal } from '../../../shared/utils'
 import { sequenceService } from './sequenceService'
 import { JOURNAL_TYPES, MOVEMENT_TYPES, PAYMENT_STATUS, SERIAL_STATUS } from '../../../shared/constants'
 
+// Helper: validate that a resource belongs to the user's branch (or user has canViewAllBranches)
+async function validateBranchOwnership(tx: any, resourceType: 'warehouse' | 'treasury', resourceId: number, branchId: number | null | undefined): Promise<void> {
+  if (!branchId) return // No branch restriction (super admin or global user)
+  
+  let resourceBranchId: number | null = null
+  
+  switch (resourceType) {
+    case 'warehouse':
+      const warehouse = await tx.warehouse.findUnique({ where: { id: resourceId }, select: { branchId: true } })
+      if (!warehouse) throw new Error(`المخزن رقم ${resourceId} غير موجود`)
+      resourceBranchId = warehouse.branchId
+      break
+    case 'treasury':
+      const treasury = await tx.treasury.findUnique({ where: { id: resourceId }, select: { branchId: true } })
+      if (!treasury) throw new Error(`الخزينة رقم ${resourceId} غير موجودة`)
+      resourceBranchId = treasury.branchId
+      break
+  }
+  
+  if (resourceBranchId !== null && resourceBranchId !== branchId) {
+    throw new Error(`${resourceType === 'warehouse' ? 'المخزن' : 'الخزينة'} لا يتبع فرع المستخدم`)
+  }
+}
+
 // خدمة المبيعات: إنشاء الفواتير مع القيود المحاسبية وتحديث المخزون
 export class SaleService {
   /**
@@ -62,6 +86,10 @@ export class SaleService {
     )
 
     return prisma.$transaction(async (tx) => {
+      // Validate branch ownership for resources
+      await validateBranchOwnership(tx, 'warehouse', warehouseId, branchId)
+      if (treasuryId) await validateBranchOwnership(tx, 'treasury', treasuryId, branchId)
+      
       // حساب الإجماليات
       const subtotal = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0)
       const taxAmount = (subtotal - discount) * (taxRate / 100)

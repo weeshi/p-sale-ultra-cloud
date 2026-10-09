@@ -4,6 +4,35 @@ import { generateNumber, toDecimal } from '../../../shared/utils'
 import { sequenceService } from './sequenceService'
 import { JOURNAL_TYPES } from '../../../shared/constants'
 
+// Helper: validate that a resource belongs to the user's branch (or user has canViewAllBranches)
+async function validateBranchOwnership(tx: any, resourceType: 'warehouse' | 'party' | 'treasury', resourceId: number, branchId: number | null | undefined): Promise<void> {
+  if (!branchId) return // No branch restriction (super admin or global user)
+  
+  let resourceBranchId: number | null = null
+  
+  switch (resourceType) {
+    case 'warehouse':
+      const warehouse = await tx.warehouse.findUnique({ where: { id: resourceId }, select: { branchId: true } })
+      if (!warehouse) throw new Error(`المخزن رقم ${resourceId} غير موجود`)
+      resourceBranchId = warehouse.branchId
+      break
+    case 'party':
+      const party = await tx.party.findUnique({ where: { id: resourceId }, select: { branchId: true } })
+      if (!party) throw new Error(`الطرف رقم ${resourceId} غير موجود`)
+      resourceBranchId = party.branchId
+      break
+    case 'treasury':
+      const treasury = await tx.treasury.findUnique({ where: { id: resourceId }, select: { branchId: true } })
+      if (!treasury) throw new Error(`الخزينة رقم ${resourceId} غير موجودة`)
+      resourceBranchId = treasury.branchId
+      break
+  }
+  
+  if (resourceBranchId !== null && resourceBranchId !== branchId) {
+    throw new Error(`${resourceType === 'warehouse' ? 'المخزن' : resourceType === 'party' ? 'الطرف' : 'الخزينة'} لا يتبع فرع المستخدم`)
+  }
+}
+
 // خدمة الخزينة: سندات القبض والصرف
 export class TreasuryService {
   /**
@@ -49,6 +78,9 @@ export class TreasuryService {
     } = data
 
     return prisma.$transaction(async (tx) => {
+      // Validate branch ownership for resources
+      await validateBranchOwnership(tx, 'treasury', treasuryId, branchId)
+      
       const receiptNumber = generateNumber(
         receiptType === 'receipt' ? 'RCV' : 'PAY',
         await sequenceService.next(companyId, receiptType === 'receipt' ? 'RCV' : 'PAY', tx)
