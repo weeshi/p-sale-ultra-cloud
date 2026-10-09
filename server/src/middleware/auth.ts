@@ -4,12 +4,13 @@ import { CONFIG } from '../config'
 import { prisma } from '../config/database'
 
 export interface AuthUser {
-  id: number
-  companyId: number
-  username: string
-  role: string
-  branchId: number | null
-  isSuperAdmin: boolean
+   id: number
+   companyId: number
+   username: string
+   role: string
+   branchId: number | null
+   isSuperAdmin: boolean
+   canViewAllBranches?: boolean
 }
 
 declare global {
@@ -37,18 +38,25 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       include: { company: true },
     })
 
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: 'المستخدم غير موجود أو غير نشط' })
-    }
+     if (!user || !user.isActive) {
+       return res.status(401).json({ error: 'المستخدم غير موجود أو غير نشط' })
+     }
 
-    req.user = {
-      id: user.id,
-      companyId: user.companyId,
-      username: user.username,
-      role: user.role,
-      branchId: user.branchId,
-      isSuperAdmin: user.isSuperAdmin,
-    }
+     // Fetch permissions and compute canViewAllBranches
+     const permissions = await prisma.permission.findMany({
+       where: { userId: user.id },
+     })
+     const canViewAllBranches = permissions.some(p => p.module === 'report_all_branches' && p.canView)
+
+     req.user = {
+       id: user.id,
+       companyId: user.companyId,
+       username: user.username,
+       role: user.role,
+       branchId: user.branchId,
+       isSuperAdmin: user.isSuperAdmin,
+       canViewAllBranches,
+     }
     req.companyId = user.companyId
     req.branchId = user.branchId
 

@@ -3,13 +3,51 @@ import { authenticate, resolveBranchScope } from '../middleware/auth'
 import { reportService } from '../services/reportService'
 import { inventoryService } from '../services/inventoryService'
 
+// Helper to compute effective branchId for report queries, enforcing canViewAllBranches
+function getEffectiveBranchId(req: any): number | undefined {
+  const wants = req.query.branchId
+  if (wants === undefined) {
+    // No explicit branchId, use existing resolveBranchScope (which respects user branch)
+    return resolveBranchScope(req)
+  }
+  // Explicit branchId provided
+  if (wants === 'all') {
+    // User wants all branches
+    if (req.user?.isSuperAdmin) return undefined
+    if (req.user?.canViewAllBranches) return undefined
+    // Not allowed, fallback to user's branch (may be null)
+    return req.branchId
+  }
+  // Parse as number
+  const branchNum = Number(wants)
+  if (isNaN(branchNum)) {
+    // Invalid value, fallback
+    return resolveBranchScope(req)
+  }
+  // Super admin can view any branch
+  if (req.user?.isSuperAdmin) return branchNum
+  const userBranch = req.branchId
+  if (userBranch == null) {
+    // User has no branch attached
+    if (req.user?.canViewAllBranches) return branchNum
+    // Not allowed to view any branch -> return undefined (will yield no data? but we'll return undefined)
+    return undefined
+  }
+  // User has a branch
+  if (branchNum === userBranch) return branchNum
+  // Requested different branch
+  if (req.user?.canViewAllBranches) return branchNum
+  // Not allowed to view other branch, fallback to user's branch
+  return userBranch
+}
+
 const router = Router()
 router.use(authenticate)
 
 // لوحة المعلومات
 router.get('/dashboard', async (req, res) => {
   try {
-    const result = await reportService.dashboard(req.companyId!, resolveBranchScope(req))
+    const result = await reportService.dashboard(req.companyId!, getEffectiveBranchId(req))
     return res.json(result)
   } catch (error: any) {
     return res.status(500).json({ error: error.message })
@@ -24,7 +62,7 @@ router.get('/sales', async (req, res) => {
       companyId: req.companyId!,
       from: from ? new Date(String(from)) : undefined,
       to: to ? new Date(String(to)) : undefined,
-      branchId: resolveBranchScope(req),
+      branchId: getEffectiveBranchId(req),
       partyId: partyId ? Number(partyId) : undefined,
       itemId: itemId ? Number(itemId) : undefined,
       userId: userId ? Number(userId) : undefined,
@@ -46,7 +84,7 @@ router.get('/stock-movements', async (req, res) => {
       itemId: itemId ? Number(itemId) : undefined,
       warehouseId: warehouseId ? Number(warehouseId) : undefined,
       movementType: movementType ? String(movementType) : undefined,
-      branchId: resolveBranchScope(req),
+      branchId: getEffectiveBranchId(req),
     })
     return res.json(result)
   } catch (error: any) {
@@ -61,7 +99,7 @@ router.get('/low-stock', async (req, res) => {
     const result = await reportService.lowStockReport(
       req.companyId!,
       warehouseId ? Number(warehouseId) : undefined,
-      resolveBranchScope(req)
+      getEffectiveBranchId(req)
     )
     return res.json(result)
   } catch (error: any) {
@@ -92,7 +130,7 @@ router.get('/treasury', async (req, res) => {
       from: from ? new Date(String(from)) : undefined,
       to: to ? new Date(String(to)) : undefined,
       treasuryId: treasuryId ? Number(treasuryId) : undefined,
-      branchId: resolveBranchScope(req),
+      branchId: getEffectiveBranchId(req),
     })
     return res.json(result)
   } catch (error: any) {
@@ -109,7 +147,7 @@ router.get('/serials', async (req, res) => {
       status: status as string | undefined,
       itemId: itemId ? Number(itemId) : undefined,
       warehouseId: warehouseId ? Number(warehouseId) : undefined,
-      branchId: resolveBranchScope(req),
+      branchId: getEffectiveBranchId(req),
     })
     return res.json(result)
   } catch (error: any) {
@@ -124,7 +162,7 @@ router.get('/warranties', async (req, res) => {
     const result = await reportService.warrantyReport(
       req.companyId!,
       status as string | undefined,
-      resolveBranchScope(req)
+      getEffectiveBranchId(req)
     )
     return res.json(result)
   } catch (error: any) {
@@ -140,7 +178,7 @@ router.get('/profit', async (req, res) => {
       companyId: req.companyId!,
       from: from ? new Date(String(from)) : undefined,
       to: to ? new Date(String(to)) : undefined,
-      branchId: resolveBranchScope(req),
+      branchId: getEffectiveBranchId(req),
     })
     return res.json(result)
   } catch (error: any) {
@@ -155,7 +193,7 @@ router.get('/stock-valuation', async (req, res) => {
     const result = await inventoryService.getStockValuation(
       req.companyId!,
       warehouseId ? Number(warehouseId) : undefined,
-      resolveBranchScope(req)
+      getEffectiveBranchId(req)
     )
     return res.json(result)
   } catch (error: any) {

@@ -16,7 +16,7 @@ const BranchFilterContext = createContext<BranchFilterValue | undefined>(undefin
 
 export function BranchFilterProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
-  const canFilter = !!user?.isSuperAdmin
+  const canFilter = !!user?.isSuperAdmin || !!user?.canViewAllBranches
   const [branches, setBranches] = useState<Branch[]>([])
   const [branchLoading, setBranchLoading] = useState(true)
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null)

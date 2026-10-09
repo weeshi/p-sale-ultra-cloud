@@ -10,6 +10,7 @@ export interface User {
   branchId?: number | null
   branchName?: string | null
   isSuperAdmin?: boolean
+  canViewAllBranches?: boolean
   permissions?: Record<string, { view: boolean; add: boolean; edit: boolean; delete: boolean; print: boolean }>
 }
 

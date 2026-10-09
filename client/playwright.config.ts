@@ -48,24 +48,25 @@ export default defineConfig({
       stdout: 'pipe',
     },
   ],
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      // محاكاة هاتف (iPhone 13) — تشغّل فقط الملفات المطابقة testMatch لضمان تخصيصها للجوال
-      // (الأبعاد مستنسخة من devices['iPhone 13'] مع channel chrome بدل webkit غير المثبّت)
-      name: 'mobile-chrome',
-      testMatch: /mobile\.spec\.ts/,
-      use: {
-        channel: 'chrome',
-        viewport: { width: 390, height: 844 },
-        deviceScaleFactor: 3,
-        isMobile: true,
-        hasTouch: true,
-        userAgent: devices['iPhone 13'].userAgent,
-      },
-    },
-  ],
+   projects: [
+     {
+       name: 'chromium',
+       use: { ...devices['Desktop Chrome'] },
+       testIgnore: [/mobile\.spec\.ts/],
+     },
+     {
+       // محاكاة هاتف (iPhone 13) — تشغّل فقط الملفات المطابقة testMatch لضمان تخصيصها للجوال
+       // (الأبعاد مستنسخة من devices['iPhone 13'] مع channel chrome بدل webkit غير المثبّت)
+       name: 'mobile-chrome',
+       testMatch: /mobile\.spec\.ts/,
+       use: {
+         channel: 'chrome',
+         viewport: { width: 390, height: 844 },
+         deviceScaleFactor: 3,
+         isMobile: true,
+         hasTouch: true,
+         userAgent: devices['iPhone 13'].userAgent,
+       },
+     },
+   ],
 })

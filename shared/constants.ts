@@ -135,22 +135,23 @@ export const USER_ROLE_LABELS: Record<string, string> = {
 }
 
 export const MODULES = {
-  ITEMS: 'items',
-  ACCOUNTS: 'accounts',
-  PARTIES: 'parties',
-  PURCHASES: 'purchases',
-  SALES: 'sales',
-  TREASURY: 'treasury',
-  JOURNAL: 'journal',
-  REPORTS: 'reports',
-  WAREHOUSES: 'warehouses',
-  TRANSFERS: 'transfers',
-  INVENTORY: 'inventory',
-  WARRANTY: 'warranty',
-  RMA: 'rma',
-  SETTINGS: 'settings',
-  USERS: 'users',
-} as const
+   ITEMS: 'items',
+   ACCOUNTS: 'accounts',
+   PARTIES: 'parties',
+   PURCHASES: 'purchases',
+   SALES: 'sales',
+   TREASURY: 'treasury',
+   JOURNAL: 'journal',
+   REPORTS: 'reports',
+   WAREHOUSES: 'warehouses',
+   TRANSFERS: 'transfers',
+   INVENTORY: 'inventory',
+   WARRANTY: 'warranty',
+   RMA: 'rma',
+   SETTINGS: 'settings',
+   USERS: 'users',
+   REPORT_ALL_BRANCHES: 'report_all_branches',
+ } as const
 
 // ============ الصلاحيات الافتراضية حسب الدور ============
 
@@ -177,13 +178,14 @@ export const ROLE_PERMISSION_PRESETS: Record<string, (module: string) => Permiss
     if (m === MODULES.ACCOUNTS || m === MODULES.JOURNAL || m === MODULES.REPORTS) return PERM_READ_PRINT
     return PERM_MANAGE
   },
-  [ROLES.ACCOUNTANT]: (m) => {
-    if (m === MODULES.ACCOUNTS || m === MODULES.JOURNAL || m === MODULES.TREASURY) return PERM_MANAGE
-    if (m === MODULES.ITEMS || m === MODULES.PARTIES || m === MODULES.PURCHASES || m === MODULES.SALES || m === MODULES.REPORTS) {
-      return PERM_READ_PRINT
-    }
-    return PERM_READ
-  },
+   [ROLES.ACCOUNTANT]: (m) => {
+     if (m === MODULES.ACCOUNTS || m === MODULES.JOURNAL || m === MODULES.TREASURY) return PERM_MANAGE
+     if (m === MODULES.ITEMS || m === MODULES.PARTIES || m === MODULES.PURCHASES || m === MODULES.SALES || m === MODULES.REPORTS) {
+       return PERM_READ_PRINT
+     }
+     if (m === MODULES.REPORT_ALL_BRANCHES) return PERM_READ
+     return PERM_READ
+   },
   [ROLES.CASHIER]: (m) => (m === MODULES.SALES || m === MODULES.TREASURY ? PERM_CASHIER : PERM_NONE),
   [ROLES.VIEWER]: () => PERM_READ,
 }
