@@ -13,10 +13,44 @@ export const api = axios.create({
   timeout: 30000,
 })
 
+// نقاط القراءة التي يطبّق فيها الخادم نطاق الفرع (resolveBranchScope)
+const BRANCH_AWARE_PREFIXES = ['/reports', '/sales', '/purchases', '/warehouses', '/treasury', '/inventory/counts']
+// نقاط تحت البادئات أعلاه لكنها لا تعتمد على نطاق الفرع
+const BRANCH_AGNOSTIC_PATHS = ['/warehouses/branches']
+
+let allBranchesByDefault = false
+
+/**
+ * يفعّل إرسال branchId=all تلقائياً لقراءات الفروع عندما يكون المستخدم صاحب صلاحية عرض الكل
+ * ويختار "كل الفروع" (أي لا فرع محدد). الخادم يطبّق الافتراضي الآمن (فرع المستخدم)،
+ * لذلك تُرسل الواجهة الاختيار صراحةً حتى لا تعرض فرعاً واحداً تحت عنوان "كل الفروع".
+ */
+export function setAllBranchesByDefault(enabled: boolean) {
+  allBranchesByDefault = enabled
+}
+
+function isBranchAwarePath(url: string): boolean {
+  const path = url.split('?')[0]
+  if (BRANCH_AGNOSTIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))) return false
+  return BRANCH_AWARE_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+
+  const url = config.url ?? ''
+  const hasBranchParam =
+    /[?&]branchId=/.test(url) || (config.params != null && 'branchId' in config.params)
+  if (
+    allBranchesByDefault &&
+    (config.method ?? 'get').toLowerCase() === 'get' &&
+    isBranchAwarePath(url) &&
+    !hasBranchParam
+  ) {
+    config.params = { ...(config.params ?? {}), branchId: 'all' }
   }
   return config
 })

@@ -10,6 +10,7 @@ import {
 } from '../services/licenseService'
 import { prisma } from '../config/database'
 import logger from '../config/logger'
+import { clearLicenseCache } from '../middleware/license'
 
 const router = Router()
 
@@ -63,6 +64,9 @@ router.post('/activate', authorize('admin'), async (req, res) => {
       return res.status(400).json({ error: result.error })
     }
 
+    // إبطال كاش التحقق حتى يُطبَّق الترخيص الجديد فوراً
+    clearLicenseCache()
+
     return res.json({
       message: 'License activated successfully',
       license: result.license,
@@ -97,6 +101,8 @@ router.post('/deactivate', authorize('admin'), async (req, res) => {
     if (!success) {
       return res.status(500).json({ error: 'Failed to deactivate license' })
     }
+    // إبطال كاش التحقق حتى يُطبَّق الإلغاء فوراً
+    clearLicenseCache()
     return res.json({ message: 'License deactivated successfully' })
   } catch (error: any) {
     logger.error('License deactivation error:', error)

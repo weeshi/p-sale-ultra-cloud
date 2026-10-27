@@ -153,11 +153,13 @@ export default function InventoryCounts() {
           `/inventory/counts/${viewCount.id}/items`,
           'POST',
           {
+            // countId يُستخدم عند إعادة التنفيذ أوفلاين على السيرفر
+            countId: viewCount.id,
             itemId: it.itemId,
             countedGoodQty: toNum(goodMap[it.id]),
             countedDamagedQty: toNum(damagedMap[it.id] ?? 0),
           },
-          { entity: 'inventoryCount' }
+          { entity: 'inventoryCount', recordId: viewCount.id }
         )
       }
       await refreshView()

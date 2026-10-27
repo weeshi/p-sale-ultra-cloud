@@ -107,6 +107,8 @@ export default function ImportOrderReceive() {
     setError('')
     setOfflineNote('')
     const payload = {
+      // يُستخدم عند إعادة تنفيذ العملية أوفلاين على السيرفر لتوجيهها لاستلام أمر الشراء
+      purchaseOrderId: po.id,
       warehouseId: Number(warehouseId),
       treasuryId: treasuryId ? Number(treasuryId) : undefined,
       receiveDate: new Date(receiveDate + 'T' + new Date().toTimeString().slice(0, 8)).toISOString(),
@@ -129,6 +131,7 @@ export default function ImportOrderReceive() {
     try {
       const res = await offlineWrite<PurchaseInvoice>(`/purchases/orders/${po.id}/receive`, 'POST', payload, {
         entity: 'purchaseInvoice',
+        recordId: po.id,
       })
       if (res.queued) {
         setOfflineNote('لا يوجد اتصال — سُجل الاستلام محلياً وستُزامن لاحقاً')

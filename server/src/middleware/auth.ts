@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { CONFIG } from '../config'
 import { prisma } from '../config/database'
+import { enforceLicense } from './license'
 
 export interface AuthUser {
    id: number
@@ -60,6 +61,12 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     req.companyId = user.companyId
     req.branchId = user.branchId
 
+    // فرض الترخيص بعد معرفة الشركة — لا يمكن فحصه قبل المصادقة (15.1)
+    const license = await enforceLicense(req)
+    if (!license.ok) {
+      return res.status(license.status).json(license.body)
+    }
+
     next()
   } catch (error) {
     return res.status(401).json({ error: 'توكن غير صالح أو منتهي' })
@@ -82,14 +89,37 @@ export function authorize(...roles: string[]) {
 }
 
 // نطاق الفرع الفعلي للقراءات:
-// - سوبر أدمن أو مستخدم عالمي (بلا فرع) → من المعامل ?branchId (الافتراضي: الكل)
+// - سوبر أدمن أو مستخدم يملك canViewAllBranches → ?branchId (أو 'all' = كل الفروع)
+// - مستخدم بلا فرع (عالمي) → ?branchId أو الكل
 // - مستخدم مربوط بفرع → يُجبر على فرعه وحدَه (منع تجاوز العزل بتزوير المعامل)
 export function resolveBranchScope(req: Request): number | undefined {
-  const wants = req.query.branchId
-  if (req.user?.isSuperAdmin || req.branchId == null) {
-    return wants !== undefined ? Number(wants) : undefined
+  const raw = req.query.branchId
+  const wants = raw === undefined || raw === '' ? undefined : String(raw)
+  const canSeeAll = Boolean(req.user?.isSuperAdmin || req.user?.canViewAllBranches)
+  const ownBranch = req.branchId ?? undefined
+
+  // 'all' صراحةً = كل الفروع (لمن يملك صلاحية عرض الكل فقط)
+  if (wants === 'all') {
+    return canSeeAll || ownBranch === undefined ? undefined : ownBranch
   }
-  return req.branchId
+
+  // الافتراضي الآمن: المستخدم المربوط بفرع يبقى على فرعه حتى لو كان يملك عرض الكل.
+  // المستخدم العالمي (بلا فرع) يرى الكل افتراضياً.
+  if (wants === undefined) {
+    return ownBranch
+  }
+
+  const requested = Number(wants)
+  if (!Number.isFinite(requested)) {
+    return ownBranch
+  }
+
+  // مستخدم عالمي بلا فرع يختار أي فرع
+  if (ownBranch === undefined) return requested
+  // صاحب صلاحية عرض الكل يختار أي فرع
+  if (canSeeAll) return requested
+  // مستخدم مقيّد: يُجبر على فرعه (منع تزوير المعامل)
+  return ownBranch
 }
 
 export function checkPermission(module: string, action: 'view' | 'add' | 'edit' | 'delete' | 'print') {

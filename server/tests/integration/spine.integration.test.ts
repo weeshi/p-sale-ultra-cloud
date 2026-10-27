@@ -73,8 +73,8 @@ beforeAll(async () => {
   expect(loginRes.status).toBe(200)
   token = loginRes.body.accessToken
 
-  // 3) المخزن المركزي الذي أنشأه الإعداد
-  const whRes = await request(app).get(`${BASE}/warehouses`).set(auth())
+  // 3) المخزن المركزي الذي أنشأه الإعداد — المدير مربوط بالفرع الرئيسي، فيطلب "كل الفروع" صراحةً
+  const whRes = await request(app).get(`${BASE}/warehouses`).query({ branchId: 'all' }).set(auth())
   expect(whRes.status).toBe(200)
   const warehouse = whRes.body.find((w: any) => w.type === 'central')
   expect(warehouse).toBeTruthy()
@@ -311,5 +311,89 @@ describe('Spine: بيع ← قيد محاسبي ← سند قبض (قاعدة My
       .set(auth())
     expect(detailRes.status).toBe(200)
     expect(detailRes.body.lines[0].receipt.id).toBe(receiptId)
+  })
+})
+
+describe('Sync: عدم التكرار (Claim-First) وإعادة المحاولة على MySQL حقيقية', () => {
+  const pushBody = (changes: any[]) => ({ deviceId: 'integration-sync-device', changes })
+
+  // المدير مربوط بالفرع الرئيسي (كما ينشئه الإعداد)، وفرع العنصر يجب أن يطابق فرع التوكن
+  async function adminIdentity() {
+    const u = await prisma.user.findFirst({ where: { companyId, username: 'admin' } })
+    if (!u) throw new Error('المستخدم admin غير موجود')
+    return { userId: u.id, branchId: u.branchId ?? null }
+  }
+
+  async function countSalesAndEntries() {
+    const invoices = await prisma.saleInvoice.count({ where: { companyId } })
+    const entries = await prisma.journalEntry.count({
+      where: { companyId, referenceType: 'sale_invoice' },
+    })
+    return { invoices, entries }
+  }
+
+  it('طلبان متوازيان بنفس clientOpId ينشئان فاتورة واحدة وقيدين فقط', async () => {
+    const { userId, branchId } = await adminIdentity()
+    const before = await countSalesAndEntries()
+
+    const change = {
+      clientOpId: `integ-parallel:${Date.now()}`,
+      queueId: 1,
+      entity: 'saleInvoice',
+      action: 'create',
+      userId,
+      branchId,
+      data: {
+        warehouseId,
+        partyId,
+        invoiceDate: today(),
+        paidAmount: 0,
+        items: [{ itemId, quantity: 1, unitPrice: 100 }],
+      },
+    }
+
+    const [r1, r2] = await Promise.all([
+      request(app).post(`${BASE}/sync/push`).set(auth()).send(pushBody([change])),
+      request(app).post(`${BASE}/sync/push`).set(auth()).send(pushBody([change])),
+    ])
+
+    expect(r1.status).toBe(200)
+    expect(r2.status).toBe(200)
+    expect(r1.body.recordsCount + r2.body.recordsCount).toBe(1)
+    expect(r1.body.skippedCount + r2.body.skippedCount).toBe(1)
+
+    const after = await countSalesAndEntries()
+    expect(after.invoices - before.invoices).toBe(1)
+    expect(after.entries - before.entries).toBe(2) // إيراد + تكلفة
+  })
+
+  it('عملية فاشلة تُحرَّر فتنجح إعادة المحاولة بالمعرّف نفسه، ثم يُتخطى التكرار', async () => {
+    const { userId, branchId } = await adminIdentity()
+    const clientOpId = `integ-retry:${Date.now()}`
+    const base = { clientOpId, queueId: 2, entity: 'party', action: 'create', userId, branchId }
+    const partyName = `عميل إعادة المحاولة ${Date.now()}`
+
+    const failed = await request(app)
+      .post(`${BASE}/sync/push`)
+      .set(auth())
+      .send(pushBody([{ ...base, data: {} }]))
+    expect(failed.body.recordsCount).toBe(0)
+    expect(failed.body.errors[0].queueId).toBe(2)
+
+    const retried = await request(app)
+      .post(`${BASE}/sync/push`)
+      .set(auth())
+      .send(pushBody([{ ...base, data: { partyName, partyType: 'customer' } }]))
+    expect(retried.body.recordsCount).toBe(1)
+    expect(retried.body.errors).toHaveLength(0)
+
+    const duplicate = await request(app)
+      .post(`${BASE}/sync/push`)
+      .set(auth())
+      .send(pushBody([{ ...base, data: { partyName, partyType: 'customer' } }]))
+    expect(duplicate.body.skippedCount).toBe(1)
+
+    const count = await prisma.party.count({ where: { companyId, partyName } })
+    expect(count).toBe(1)
   })
 })

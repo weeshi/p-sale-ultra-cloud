@@ -1,9 +1,19 @@
-import { Router } from 'express'
+import { Request, Router } from 'express'
 import { authenticate } from '../middleware/auth'
-import { syncService } from '../services/syncService'
+import { syncService, type SyncActor } from '../services/syncService'
 
 const router = Router()
 router.use(authenticate)
+
+// هوية المنفّذ من التوكن فقط — لا تُقبل من حمولة العميل
+function actorOf(req: Request): SyncActor {
+  return {
+    userId: req.user!.id,
+    branchId: req.branchId ?? null,
+    isSuperAdmin: !!req.user?.isSuperAdmin,
+    role: req.user!.role,
+  }
+}
 
 // دفع التغييرات المحلية إلى السيرفر
 router.post('/push', async (req, res) => {
@@ -12,7 +22,7 @@ router.post('/push', async (req, res) => {
     if (!deviceId || !changes || !Array.isArray(changes)) {
       return res.status(400).json({ error: 'deviceId و changes مطلوبان' })
     }
-    const result = await syncService.pushChanges(req.companyId!, req.user!.id, req.branchId ?? null, deviceId, changes)
+    const result = await syncService.pushChanges(req.companyId!, actorOf(req), deviceId, changes)
     return res.json(result)
   } catch (error: any) {
     return res.status(500).json({ error: error.message })
@@ -44,10 +54,11 @@ router.post('/full', async (req, res) => {
     let pushResult = {
       status: 'success',
       recordsCount: 0,
-      errors: [] as Array<{ entity: string; id: number | null; message: string }>,
+      skippedCount: 0,
+      errors: [] as Array<{ entity: string; id: number | null; queueId: number | null; message: string }>,
     }
     if (changes && Array.isArray(changes) && changes.length > 0) {
-      pushResult = await syncService.pushChanges(req.companyId!, req.user!.id, req.branchId ?? null, deviceId, changes)
+      pushResult = await syncService.pushChanges(req.companyId!, actorOf(req), deviceId, changes)
     }
 
     const pullResult = await syncService.pullChanges(

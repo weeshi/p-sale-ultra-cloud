@@ -29,7 +29,6 @@ import notificationRoutes from './routes/notifications'
 import exchangeRoutes from './routes/exchange'
 import settingsRoutes from './routes/settings'
 import licenseRoutes from './routes/license'
-import { checkLicense } from './middleware/license'
 
 const app = express()
 const server = http.createServer(app)
@@ -56,6 +55,9 @@ app.use(compression())
 app.use(express.json({ limit: '50mb' }))
 app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 
+// سجل الطلبات أولاً حتى يشمل كل الطلبات (بما فيها المسارات التي ترد بـ res.json مباشرة)
+app.use(httpLogger)
+
 // مسارات عامة
 app.get('/api/health', async (req, res) => {
   try {
@@ -76,6 +78,9 @@ app.get('/api/health', async (req, res) => {
     })
   }
 })
+
+// تحديد معدل الطلبات قبل تسجيل مسارات الأعمال — وإلا لن يمر عليه أي طلب يردّ مباشرة
+app.use('/api', apiLimiter)
 
 // المسارات
 app.use('/api/auth', authLimiter, authRoutes)
@@ -98,12 +103,7 @@ app.use('/api/exchange', exchangeRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/license', licenseRoutes)
 
-// License check middleware — enforces valid license on all business routes
-// Applied AFTER auth routes (login/setup must work without license)
-// Applied BEFORE apiLimiter (license check is more critical than rate limiting)
-app.use('/api', checkLicense)
-
-app.use('/api', apiLimiter)
+// فحص الترخيص مضمّن داخل authenticate (بعد حقن req.companyId) — راجع middleware/auth.ts
 
 // WebSocket للتحديثات اللحظية — يعالج initRealtime الاتصالات وغرف الشركة/الفروع
 
@@ -111,7 +111,6 @@ app.use('/api', apiLimiter)
 export { emitSyncEvent } from './realtime'
 
 // معالجة الأخطاء
-app.use(httpLogger)
 app.use(notFound)
 app.use(errorHandler)
 

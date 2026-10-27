@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api } from '@/lib/api'
+import { api, setAllBranchesByDefault } from '@/lib/api'
 import { cachedRead } from '@/lib/offline'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Branch } from '@/types'
@@ -20,6 +20,9 @@ export function BranchFilterProvider({ children }: { children: ReactNode }) {
   const [branches, setBranches] = useState<Branch[]>([])
   const [branchLoading, setBranchLoading] = useState(true)
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null)
+
+  // يُضبط أثناء التصيير (قبل جلب أي بيانات الأبناء) — "كل الفروع" = branchId=all صراحةً
+  setAllBranchesByDefault(canFilter && selectedBranchId == null)
 
   // عند تغيير المستخدم: السوبر أدمن يبدأ بالكل (null)، وغيره يُقيَّد على فرعه
   useEffect(() => {

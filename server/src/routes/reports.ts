@@ -3,42 +3,9 @@ import { authenticate, resolveBranchScope } from '../middleware/auth'
 import { reportService } from '../services/reportService'
 import { inventoryService } from '../services/inventoryService'
 
-// Helper to compute effective branchId for report queries, enforcing canViewAllBranches
+// نطاق الفرع الموحّد للتقارير (15.5): resolveBranchScope يتكفل بـ canViewAllBranches و branchId=all
 function getEffectiveBranchId(req: any): number | undefined {
-  const wants = req.query.branchId
-  if (wants === undefined) {
-    // No explicit branchId, use existing resolveBranchScope (which respects user branch)
-    return resolveBranchScope(req)
-  }
-  // Explicit branchId provided
-  if (wants === 'all') {
-    // User wants all branches
-    if (req.user?.isSuperAdmin) return undefined
-    if (req.user?.canViewAllBranches) return undefined
-    // Not allowed, fallback to user's branch (may be null)
-    return req.branchId
-  }
-  // Parse as number
-  const branchNum = Number(wants)
-  if (isNaN(branchNum)) {
-    // Invalid value, fallback
-    return resolveBranchScope(req)
-  }
-  // Super admin can view any branch
-  if (req.user?.isSuperAdmin) return branchNum
-  const userBranch = req.branchId
-  if (userBranch == null) {
-    // User has no branch attached
-    if (req.user?.canViewAllBranches) return branchNum
-    // Not allowed to view any branch -> return undefined (will yield no data? but we'll return undefined)
-    return undefined
-  }
-  // User has a branch
-  if (branchNum === userBranch) return branchNum
-  // Requested different branch
-  if (req.user?.canViewAllBranches) return branchNum
-  // Not allowed to view other branch, fallback to user's branch
-  return userBranch
+  return resolveBranchScope(req)
 }
 
 const router = Router()

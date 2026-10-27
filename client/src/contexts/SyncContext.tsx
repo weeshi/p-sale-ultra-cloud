@@ -28,7 +28,12 @@ interface PullResult {
 }
 
 interface FullSyncResult {
-  push: { status: string; recordsCount: number; errors: Array<{ entity: string; id: number | null; message: string }> }
+  push: {
+    status: string
+    recordsCount: number
+    skippedCount?: number
+    errors: Array<{ entity: string; id: number | null; queueId: number | null; message: string }>
+  }
   pull: PullResult
 }
 
@@ -95,6 +100,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       const queue = await getPendingQueue()
 
       const changes = queue.map((item) => ({
+        // معرّف فريد للعملية يمنع تنفيذها مرتين على السيرفر (Idempotency)
+        clientOpId: item.id !== undefined ? `${deviceId}:${item.id}:${item.createdAt}` : undefined,
+        // مفتاح الطابور المحلي — يعيده السيرفر في الأخطاء لمطابقة دقيقة
+        queueId: item.id ?? null,
         entity: item.entity,
         action: item.action,
         id: item.recordId,
@@ -110,20 +119,23 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         changes,
       })
 
-      // تحديد التعارضات (طلبات فشلت من الخادم)
+      // تحديد التعارضات (طلبات فشلت من الخادم) — المطابقة بمفتاح الطابور queueId
       const pushErrors = res.data.push?.errors ?? []
-      const failedIds = new Set<number>()
+      const errorByQueueId = new Map<number, string>()
       for (const err of pushErrors) {
-        if (err.id !== null) failedIds.add(err.id)
+        if (err.queueId !== null && err.queueId !== undefined) {
+          errorByQueueId.set(err.queueId, err.message)
+        }
       }
 
       const failed: QueueItem[] = []
       for (const item of queue) {
-        if (item.id !== undefined && failedIds.has(item.id)) {
-          const msg = pushErrors.find((e) => e.id === item.id)?.message ?? 'تعارض في المزامنة'
-          await markFailed(item.id, msg)
-          failed.push({ ...item, error: msg })
-        } else if (item.id !== undefined) {
+        if (item.id === undefined) continue
+        const failureMessage = errorByQueueId.get(item.id)
+        if (failureMessage !== undefined) {
+          await markFailed(item.id, failureMessage)
+          failed.push({ ...item, error: failureMessage })
+        } else {
           await markSynced(item.id)
         }
       }

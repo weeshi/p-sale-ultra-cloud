@@ -172,6 +172,7 @@ export class PurchaseService {
         include: { items: true, party: true },
       })
       if (!po) throw new Error('أمر الشراء غير موجود')
+      if (po.companyId !== companyId) throw new Error('أمر الشراء لا يتبع هذه الشركة')
       if (po.status === 'cancelled') throw new Error('أمر الشراء ملغي')
       if (po.status === 'received') throw new Error('أمر الشراء تم استلامه مسبقاً')
 

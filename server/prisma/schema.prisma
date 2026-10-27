@@ -57,6 +57,7 @@ model Company {
   sequences        Sequence[]
   bankReconciliations BankReconciliation[]
   licenses            License[]
+  syncOperations      SyncOperation[]
 
   @@map("companies")
 }
@@ -1179,6 +1180,27 @@ model SyncLog {
   company Company @relation(fields: [companyId], references: [id])
 
   @@map("sync_logs")
+}
+
+// ============================================
+// منع تكرار عمليات المزامنة (Idempotency)
+// كل عملية يدفعها جهاز يُسجَّل بمعرّف عميل فريد — إعادة الدفع لا تُنفّذها مرتين
+// ============================================
+model SyncOperation {
+  id         Int      @id @default(autoincrement())
+  companyId  Int      @map("company_id")
+  deviceId   String   @map("device_id") @db.VarChar(255)
+  clientOpId String   @unique @map("client_op_id") @db.VarChar(255)
+  entity     String   @db.VarChar(50)
+  action     String   @db.VarChar(20)
+  recordId   Int?     @map("record_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, deviceId])
+  @@index([createdAt])
+  @@map("sync_operations")
 }
 
 // ============================================
