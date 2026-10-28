@@ -107,4 +107,20 @@ export default defineConfig({
       },
     },
   },
+  // `npm run preview` (خدمة حزمة الإنتاج) يحتاج نفس الوسيط — بدونه يعيد خادم
+  // الملفات الثابتة index.html لأي مسار /api/* ويضيع Socket.IO (عطل 2026-10-28)
+  preview: {
+    port: 5175,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3005',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:3005',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
 })

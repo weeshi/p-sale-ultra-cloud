@@ -31,8 +31,9 @@ export function BranchFilterProvider({ children }: { children: ReactNode }) {
     }
   }, [user, canFilter])
 
-  // جلب قائمة الفروع مرة واحدة
+  // جلب قائمة الفروع بعد تسجيل الدخول فقط (قبل الدخول لا يوجد توكن → 401 في الكونسول)
   useEffect(() => {
+    if (!user) return
     let mounted = true
     cachedRead<Branch[]>('branches:list', () => api.get('/warehouses/branches').then((r) => r.data), 'branches'
       )
@@ -46,7 +47,7 @@ export function BranchFilterProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [user])
 
   const value = useMemo(
     () => ({ branches, branchLoading, selectedBranchId, setSelectedBranchId, canFilter }),

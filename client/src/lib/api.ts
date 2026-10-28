@@ -6,7 +6,22 @@ const REFRESH_KEY = 'psale_refresh_token'
 
 // استخدام متغير بيئة أو القيمة الافتراضية للإنتاج
 // Vite يستبدل import.meta.env.VITE_API_BASE_URL عند البناء
-const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3005/api'
+// عنوان الـ API: من متغيرات Vite إن وُجد، وإلا الخادم المحلي على 3005
+export const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3005/api'
+
+/**
+ * أصل الخادم (origin) المشتق من عنوان الـ API — يُستخدم للاتصال اللحظي (Socket.IO).
+ * مثال: http://localhost:3005/api → http://localhost:3005
+ * إن كان العنوان نسبياً (نشر خلف nginx) نُعيد undefined ليتصل Socket.IO بنفس الأصل.
+ */
+export const API_ORIGIN: string | undefined = (() => {
+  try {
+    const url = new URL(API_BASE_URL, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+    return url.origin
+  } catch {
+    return undefined
+  }
+})()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -91,7 +106,10 @@ export function isAuthenticated(): boolean {
 
 export function extractError(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const msg = error.response?.data?.error || error.response?.data?.message
+    const data = error.response?.data
+    // الرسالة العربية (message) أولى بالعرض من الرمز الإنجليزي (error) —
+    // مثال: الترخيص يعيد error: 'License validation failed' و message عربية مفصّلة
+    const msg = data?.message || data?.error
     if (msg) return msg
     if (error.code === 'ECONNABORTED') return 'انتهت مهلة الطلب'
     if (!error.response) return 'تعذر الاتصال بالخادم — تحقق من الاتصال بالإنترنت'

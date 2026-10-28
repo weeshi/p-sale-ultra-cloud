@@ -1,4 +1,4 @@
-import { api } from './api'
+import { api, API_BASE_URL } from './api'
 import { cacheGet, cacheGetWithVersion, cacheSet, cacheSetWithVersion, enqueue, invalidateEntityCaches } from './db'
 import { getActiveScope, namespaceKey } from './session'
 import { getCacheVersion, incCacheVersion } from './cacheVersion'
@@ -24,7 +24,12 @@ export function getDeviceId(): string {
   return id
 }
 
-const HEALTH_CHECK_URL = '/api/health'
+/**
+ * عنوان فحص الصحة: يجب أن يتبع عنوان الـ API المُهيّأ، لا أصل الصفحة.
+ * سبب العطل (2026-10-28): الطلب النسبي '/api/health' كان يُخدَّم من خادم
+ * الملفات الثابتة (`serve -s dist`) فيعيد index.html بحالة 200 — فيُخدع الفحص.
+ */
+const HEALTH_CHECK_URL = `${API_BASE_URL.replace(/\/+$/, '')}/health`
 const HEALTH_CHECK_INTERVAL_MS = 30_000
 const HEALTH_CHECK_TIMEOUT_MS = 5_000
 /** مهلة جلب الشبكة في cachedRead — يمنع تعليق الطلب عند اتصال بالراوتر دون إنترنت حقيقي */
@@ -38,9 +43,13 @@ async function checkHealth(): Promise<boolean> {
   try {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), HEALTH_CHECK_TIMEOUT_MS)
-    const res = await fetch(HEALTH_CHECK_URL, { cache: 'no-store', redirect: 'error', signal: ctrl.signal })
+    const res = await fetch(HEALTH_CHECK_URL, { cache: 'no-store', signal: ctrl.signal })
     clearTimeout(timer)
-    return res?.ok ?? false
+    if (!res?.ok) return false
+    // لا نكتفي بحالة 200: أي صفحة HTML (SPA fallback) تُعيد 200 أيضاً —
+    // نتأكد أن الاستجابة هي فعلاً استجابة صحة من الخادم
+    const data = await res.json().catch(() => null)
+    return Boolean(data && (data.status === 'ok' || data.db === 'connected'))
   } catch {
     return false
   }
@@ -153,14 +162,10 @@ export async function cachedRead<T>(key: string, fetcher: () => Promise<T>, enti
     if (cached !== undefined && !isOnline()) {
       return { data: cached.data, fromCache: true }
     }
-    if (cached !== undefined && cached.version === currentVersion) {
-      // الكاش حديث، نعيده فوراً ونحدث في الخلفية
-      safeFetch(fetcher)
-        .then((fresh) => cacheSetWithVersion(nsKey, fresh, currentVersion))
-        .catch(() => {})
-      return { data: cached.data, fromCache: true }
-    }
-    // الكاش قديم أو لا يوجد — نجلب من الشبكة (بمهلة ردع ثم نرجع للنسخة المخزنة)
+    // متصل: نجلب الأحدث من الشبكة ونحدّث الكاش.
+    // (سابقاً كان الكاش المطابق للإصدار يُعاد فوراً مع تحديث في الخلفية،
+    // فظهرت لافتة «عرض نسخة مخزنة — قد تكون البيانات غير محدّثة» عند كل فتح
+    // صفحة رغم سلامة الاتصال — عطل UX موثّق 2026-10-28)
     try {
       const fresh = await safeFetch(fetcher)
       await cacheSetWithVersion(nsKey, fresh, currentVersion)

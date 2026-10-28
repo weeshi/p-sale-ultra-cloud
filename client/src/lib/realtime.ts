@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { getAccessToken } from '@/lib/api'
+import { API_ORIGIN, getAccessToken } from '@/lib/api'
 import type { TransferNotificationPayload } from '@/types'
 
 type Handler = (data: TransferNotificationPayload) => void
@@ -25,7 +25,9 @@ function bindAllHandlers() {
  */
 export function connectRealtime() {
   disconnectRealtime()
-  socket = io('/', {
+  // الاتصال بأصل الخادم (وليس أصل الصفحة): في التطوير/preview الواجهة على 5175
+  // والخادم على 3005، فالاتصال النسبي 'ws://localhost:5175/socket.io' يفشل دائماً.
+  socket = io(API_ORIGIN, {
     transports: ['websocket', 'polling'],
     auth: { token: getAccessToken() ?? undefined },
   })

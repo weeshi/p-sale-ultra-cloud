@@ -1,10 +1,13 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { prisma } from '../config/database'
 import { CONFIG } from '../config'
 import logger from '../config/logger'
+import { generateHardwareHash } from './hardwareId'
+
+// بصمة العتاد تُحسب في وحدة مستقلة (hardwareId) لتكون حتمية وقابلة للاختبار
+export { generateHardwareHash }
 
 // ============================================
 // License System - Core Logic
@@ -34,21 +37,9 @@ export interface LicenseValidationResult {
 }
 
 // ============================================
-// Hardware Fingerprint Generation
-// CPU model + core count + first non-null MAC
+// Hardware Fingerprint — انظر services/hardwareId.ts
+// (CPU model + core count + MAC مستقر بترتيب حتمي)
 // ============================================
-export function generateHardwareHash(): string {
-  const cpus = os.cpus()
-  const cpuModel = cpus[0]?.model || 'unknown'
-  const cpuCount = cpus.length
-
-  const mac = Object.values(os.networkInterfaces())
-    .flat()
-    .find((i) => i && i.mac && i.mac !== '00:00:00:00:00:00' && !i.internal)?.mac || 'no-mac'
-
-  const raw = `${cpuModel}:${cpuCount}:${mac}`
-  return crypto.createHash('sha256').update(raw).digest('hex')
-}
 
 // ============================================
 // Ed25519 Signature Verification (PUBLIC KEY ONLY)
