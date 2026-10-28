@@ -43,6 +43,10 @@ services:
       context: .
       dockerfile: server/Dockerfile
     restart: unless-stopped
+    # ترخيص العتاد (hwHash) = CPU + عدد الأنوية + أول MAC غير داخلي.
+    # داخل Docker يكون MAC الحاوية مشتقاً من عنوان IP الديناميكي، فيتغيّر عند
+    # إعادة إنشاء الحاوية ويُبطل الترخيص. تثبيت MAC يجعل البصمة مستقرة.
+    mac_address: "02:42:ac:1f:00:05"
     depends_on:
       migrate:
         condition: service_completed_successfully
