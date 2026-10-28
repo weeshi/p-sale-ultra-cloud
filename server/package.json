@@ -17,7 +17,8 @@
     "test:integration:db": "node scripts/setup-integration-db.cjs",
     "license:issuer": "tsx scripts/license-issuer/server.ts",
     "license:sign": "tsx scripts/sign-license.ts",
-    "migrate:vendors": "tsx scripts/migrate-custvend-vendors.ts"
+    "migrate:vendors": "tsx scripts/migrate-custvend-vendors.ts",
+    "repair:mojibake": "tsx scripts/repair-mojibake.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
