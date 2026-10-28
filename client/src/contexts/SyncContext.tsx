@@ -32,7 +32,7 @@ interface FullSyncResult {
     status: string
     recordsCount: number
     skippedCount?: number
-    errors: Array<{ entity: string; id: number | null; queueId: number | null; message: string }>
+    errors: Array<{ entity: string; id: number | null; queueId: number | null; code?: string; message: string }>
   }
   pull: PullResult
 }

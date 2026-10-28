@@ -1194,6 +1194,7 @@ model SyncOperation {
   entity     String   @db.VarChar(50)
   action     String   @db.VarChar(20)
   recordId   Int?     @map("record_id")
+  status     String   @default("PENDING") @db.VarChar(20)
   createdAt  DateTime @default(now()) @map("created_at")
 
   company Company @relation(fields: [companyId], references: [id])

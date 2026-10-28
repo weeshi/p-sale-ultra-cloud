@@ -6,6 +6,7 @@ import { inventoryService } from './inventoryService'
 import { saleService } from './saleService'
 import { treasuryService } from './treasuryService'
 import { sequenceService } from './sequenceService'
+import { accountingService } from './accountingService'
 import { logSecurityEvent } from '../middleware/audit'
 import { notifyTransfer } from '../realtime'
 
@@ -13,14 +14,21 @@ jest.mock('../config/database', () => ({
   prisma: {
     $transaction: jest.fn(),
     syncLog: { create: jest.fn() },
-    syncOperation: { findUnique: jest.fn(), create: jest.fn(), delete: jest.fn(), deleteMany: jest.fn() },
+    syncOperation: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      delete: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     item: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn() },
     party: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn() },
     user: { findFirst: jest.fn(), update: jest.fn() },
     permission: { deleteMany: jest.fn(), createMany: jest.fn() },
     stock: { create: jest.fn() },
     warehouse: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
-    branch: { findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
+    branch: { findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     treasury: { findFirst: jest.fn() },
     exchangeRate: { findFirst: jest.fn() },
   },
@@ -71,6 +79,7 @@ const COMPANY = 1
 const USER = 7
 const BRANCH = 2
 const DEVICE = 'dev-test'
+const today = () => new Date().toISOString().slice(0, 10)
 
 function change(overrides: Record<string, any> = {}) {
   return {
@@ -103,6 +112,8 @@ describe('SyncService.pushChanges', () => {
     mockPrisma.syncOperation.findUnique.mockResolvedValue(null)
     mockPrisma.syncOperation.create.mockResolvedValue({ id: 1 })
     mockPrisma.syncOperation.delete.mockResolvedValue({ id: 1 })
+    mockPrisma.syncOperation.update.mockResolvedValue({ id: 1 })
+    mockPrisma.syncOperation.updateMany.mockResolvedValue({ count: 1 })
     mockPrisma.syncOperation.deleteMany.mockResolvedValue({ count: 0 })
     mockPrisma.exchangeRate.findFirst.mockResolvedValue(null)
     mockPrisma.warehouse.findFirst.mockResolvedValue({ id: 30, type: 'central', branchId: BRANCH })
@@ -443,7 +454,11 @@ describe('SyncService.pushChanges', () => {
   it('يرفض تعديل سجل يتبع شركة أخرى', async () => {
     mockPrisma.branch.findFirst.mockResolvedValue(null)
 
-    const result = await push([change({ entity: 'branch', action: 'update', id: 99, data: { branchName: 'فرع آخر' } })])
+    const result = await push(
+      [change({ entity: 'branch', action: 'update', id: 99, data: { branchName: 'فرع آخر' } })],
+      false,
+      'admin'
+    )
 
     expect(result.errors).toHaveLength(1)
     expect(result.errors[0].message).toContain('غير موجود في هذه الشركة')
@@ -453,9 +468,10 @@ describe('SyncService.pushChanges', () => {
   it('يرفض حذف سجل يتبع شركة أخرى', async () => {
     mockPrisma.warehouse.findFirst.mockResolvedValue(null)
 
-    const result = await push([change({ entity: 'warehouse', action: 'delete', id: 77 })])
+    const result = await push([change({ entity: 'warehouse', action: 'delete', id: 77 })], false, 'admin')
 
     expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].message).toContain('غير موجود في هذه الشركة')
     expect(mockPrisma.warehouse.delete).not.toHaveBeenCalled()
   })
 
@@ -470,5 +486,223 @@ describe('SyncService.pushChanges', () => {
       where: { id: 77 },
       data: expect.objectContaining({ name: 'مخزن', branchId: BRANCH }),
     })
+  })
+})
+
+// =====================================================================
+// تفويض المزامنة (RBAC) — إغلاق ثغرة تجاوز الصلاحيات عبر /sync/push
+// =====================================================================
+
+describe('SyncService — تفويض المزامنة (RBAC)', () => {
+  it('كاشير: يُرفض القيد المحاسبي وتُقبل فاتورة البيع في نفس الدفعة', async () => {
+    const result = await push(
+      [
+        change({
+          entity: 'journalEntry',
+          action: 'create',
+          queueId: 21,
+          data: { entryDate: today(), lines: [{ accountId: 1, debit: 10 }, { accountId: 2, credit: 10 }] },
+        }),
+        change({
+          entity: 'saleInvoice',
+          action: 'create',
+          queueId: 22,
+          data: { warehouseId: 30, items: [{ itemId: 100, quantity: 1, unitPrice: 10 }] },
+        }),
+      ],
+      false,
+      'cashier'
+    )
+
+    expect(result.recordsCount).toBe(1)
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0]).toMatchObject({ entity: 'journalEntry', queueId: 21, code: 'FORBIDDEN' })
+    expect(result.errors[0].message).toContain('لا تملك صلاحية')
+    expect(accountingService.createJournalEntry).not.toHaveBeenCalled()
+    expect(mockSaleInvoice).toHaveBeenCalledTimes(1)
+  })
+
+  it('كاشير: لا يستطيع تعديل صنف (سعر أو بيانات) عبر المزامنة', async () => {
+    const result = await push(
+      [change({ entity: 'item', action: 'update', id: 500, data: { salePrice: 1 } })],
+      false,
+      'cashier'
+    )
+
+    expect(result.errors).toHaveLength(1)
+    expect(result.errors[0].code).toBe('FORBIDDEN')
+    expect(mockPrisma.item.findFirst).not.toHaveBeenCalled()
+    expect(mockPrisma.item.update).not.toHaveBeenCalled()
+  })
+
+  it('كاشير: لا يستطيع إنشاء خزينة أو أمر شراء', async () => {
+    const result = await push(
+      [
+        change({ entity: 'treasury', action: 'create', data: { treasuryName: 'خزينة' } }),
+        change({ entity: 'purchaseOrder', action: 'create', data: { partyId: 1, items: [{ itemId: 1 }] } }),
+      ],
+      false,
+      'cashier'
+    )
+
+    expect(result.recordsCount).toBe(0)
+    expect(result.errors).toHaveLength(2)
+    expect(result.errors.every((e: any) => e.code === 'FORBIDDEN')).toBe(true)
+    expect(purchaseService.createPurchaseOrder).not.toHaveBeenCalled()
+  })
+
+  it('كاشير: محاولة غير مصرحة تُسجَّل كحدث أمني UNAUTHORIZED_SYNC_ATTEMPT', async () => {
+    await push([change({ entity: 'journalEntry', action: 'create', data: { lines: [] } })], false, 'cashier')
+
+    expect(mockSecurity).toHaveBeenCalledWith(
+      'UNAUTHORIZED_SYNC_ATTEMPT',
+      expect.stringContaining('journalEntry'),
+      { companyId: COMPANY, userId: USER }
+    )
+  })
+
+  it('محاسب: قيد اليومية مسموح ويُنفَّذ عبر خدمة المحاسبة', async () => {
+    const result = await push(
+      [
+        change({
+          entity: 'journalEntry',
+          action: 'create',
+          data: { entryDate: today(), lines: [{ accountId: 1, debit: 10 }, { accountId: 2, credit: 10 }] },
+        }),
+      ],
+      false,
+      'accountant'
+    )
+
+    expect(result.errors).toHaveLength(0)
+    expect(accountingService.createJournalEntry).toHaveBeenCalledTimes(1)
+  })
+
+  it('محاسب: لا يستطيع تعديل مستخدمين أو إنشاء فرع', async () => {
+    const result = await push(
+      [
+        change({ entity: 'user', action: 'update', id: 5, data: { role: 'admin' } }),
+        change({ entity: 'branch', action: 'create', data: { name: 'فرع جديد' } }),
+      ],
+      false,
+      'accountant'
+    )
+
+    expect(result.errors).toHaveLength(2)
+    expect(result.errors.every((e: any) => e.code === 'FORBIDDEN')).toBe(true)
+    expect(mockPrisma.user.update).not.toHaveBeenCalled()
+    expect(mockPrisma.branch.create).not.toHaveBeenCalled()
+  })
+
+  it('الأدمن: يمر على كل الكيانات', async () => {
+    const result = await push(
+      [
+        change({
+          entity: 'journalEntry',
+          action: 'create',
+          data: { entryDate: today(), lines: [{ accountId: 1, debit: 10 }, { accountId: 2, credit: 10 }] },
+        }),
+        change({ entity: 'item', action: 'create', data: { itemName: 'صنف' } }),
+      ],
+      false,
+      'admin'
+    )
+
+    expect(result.errors).toHaveLength(0)
+    expect(accountingService.createJournalEntry).toHaveBeenCalledTimes(1)
+  })
+})
+
+// =====================================================================
+// حالة الحجز (PENDING/COMPLETED) — إغلاق نافذة الانقطاع
+// =====================================================================
+
+describe('SyncService — حالة عملية المزامنة ونافذة الانقطاع', () => {
+  const OP = 'dev-test:77:1'
+  const MINUTE = 60 * 1000
+
+  it('الحجز يُسجَّل PENDING ثم يُغلق COMPLETED بعد نجاح التنفيذ', async () => {
+    await push([change({ queueId: 77, clientOpId: OP })])
+
+    expect(mockPrisma.syncOperation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ clientOpId: OP, status: 'PENDING' }),
+    })
+    expect(mockPrisma.syncOperation.update).toHaveBeenCalledWith({
+      where: { clientOpId: OP },
+      data: { status: 'COMPLETED' },
+    })
+
+    const claimOrder = mockPrisma.syncOperation.create.mock.invocationCallOrder[0]
+    const applyOrder = mockPrisma.party.create.mock.invocationCallOrder[0]
+    const completeOrder = mockPrisma.syncOperation.update.mock.invocationCallOrder[0]
+    expect(claimOrder).toBeLessThan(applyOrder)
+    expect(applyOrder).toBeLessThan(completeOrder)
+  })
+
+  it('معرّف منفَّذ سابقاً (COMPLETED) يُتخطى دون تنفيذ', async () => {
+    mockPrisma.syncOperation.create.mockRejectedValue(UNIQUE_VIOLATION)
+    mockPrisma.syncOperation.findUnique.mockResolvedValue({
+      clientOpId: OP,
+      status: 'COMPLETED',
+      createdAt: new Date(Date.now() - 30 * MINUTE),
+    })
+
+    const result = await push([change({ queueId: 77, clientOpId: OP })])
+
+    expect(result.recordsCount).toBe(0)
+    expect(result.skippedCount).toBe(1)
+    expect(result.errors).toHaveLength(0)
+    expect(mockPrisma.party.create).not.toHaveBeenCalled()
+    expect(mockPrisma.syncOperation.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('عملية قيد التنفيذ (PENDING حديثة) تُتخطى ولا تُنفَّذ مرتين', async () => {
+    mockPrisma.syncOperation.create.mockRejectedValue(UNIQUE_VIOLATION)
+    mockPrisma.syncOperation.findUnique.mockResolvedValue({
+      clientOpId: OP,
+      status: 'PENDING',
+      createdAt: new Date(Date.now() - 10 * 1000),
+    })
+
+    const result = await push([change({ queueId: 77, clientOpId: OP })])
+
+    expect(result.skippedCount).toBe(1)
+    expect(mockPrisma.party.create).not.toHaveBeenCalled()
+  })
+
+  it('حجز معلّق أقدم من 5 دقائق (أثر انقطاع) يُستولى عليه ويُنفَّذ', async () => {
+    mockPrisma.syncOperation.create.mockRejectedValue(UNIQUE_VIOLATION)
+    mockPrisma.syncOperation.findUnique.mockResolvedValue({
+      clientOpId: OP,
+      status: 'PENDING',
+      createdAt: new Date(Date.now() - 6 * MINUTE),
+    })
+    mockPrisma.syncOperation.updateMany.mockResolvedValue({ count: 1 })
+
+    const result = await push([change({ queueId: 77, clientOpId: OP })])
+
+    expect(result.recordsCount).toBe(1)
+    expect(result.skippedCount).toBe(0)
+    expect(mockPrisma.party.create).toHaveBeenCalledTimes(1)
+    expect(mockPrisma.syncOperation.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ clientOpId: OP, status: 'PENDING' }),
+      })
+    )
+  })
+
+  it('إذا سبقنا طلب موازٍ إلى الاستيلاء على الحجز المعلّق تُتخطى العملية', async () => {
+    mockPrisma.syncOperation.create.mockRejectedValue(UNIQUE_VIOLATION)
+    mockPrisma.syncOperation.findUnique.mockResolvedValue({
+      clientOpId: OP,
+      status: 'PENDING',
+      createdAt: new Date(Date.now() - 6 * MINUTE),
+    })
+    mockPrisma.syncOperation.updateMany.mockResolvedValue({ count: 0 })
+
+    const result = await push([change({ queueId: 77, clientOpId: OP })])
+
+    expect(result.skippedCount).toBe(1)
+    expect(mockPrisma.party.create).not.toHaveBeenCalled()
   })
 })

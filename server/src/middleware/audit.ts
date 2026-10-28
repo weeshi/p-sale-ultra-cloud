@@ -31,7 +31,7 @@ export async function auditLog(
 
 /** تسجيل حدث أمني (تزوير هوية / وصول فرع مرفوض) في سجل التدقيق */
 export async function logSecurityEvent(
-  eventType: 'IDENTITY_TAMPERING' | 'BRANCH_ACCESS_DENIED',
+  eventType: 'IDENTITY_TAMPERING' | 'BRANCH_ACCESS_DENIED' | 'UNAUTHORIZED_SYNC_ATTEMPT',
   message: string,
   actor?: { companyId: number; userId: number } | null
 ) {

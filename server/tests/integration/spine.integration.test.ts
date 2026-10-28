@@ -397,3 +397,192 @@ describe('Sync: عدم التكرار (Claim-First) وإعادة المحاول�
     expect(count).toBe(1)
   })
 })
+
+// =====================================================================
+// تفويض المزامنة (RBAC) — سيناريو الهجوم الفعلي على MySQL حقيقية
+// كاشير يرسل دفعة تحتوي قيداً محاسبياً + فاتورة بيع: يُرفض القيد وتُقبل الفاتورة
+// =====================================================================
+
+describe('Sync RBAC: منع تجاوز الصلاحيات عبر /sync/push', () => {
+  const CASHIER_PASSWORD = 'Cashier123!'
+  let cashierToken = ''
+  let cashierId = 0
+  let cashierBranchId: number | null = null
+
+  beforeAll(async () => {
+    const admin = await prisma.user.findFirst({ where: { companyId, username: 'admin' } })
+    if (!admin) throw new Error('المستخدم admin غير موجود')
+
+    const username = `cashier_${Date.now()}`
+
+    // إنشاء كاشير من مسار الإعدادات الرسمي (يطبّق وصفة صلاحيات الدور)
+    const created = await request(app)
+      .post(`${BASE}/settings/users`)
+      .set(auth())
+      .send({
+        username,
+        password: CASHIER_PASSWORD,
+        fullName: 'كاشير اختبار RBAC',
+        role: 'cashier',
+        branchId: admin.branchId,
+      })
+    expect(created.status).toBe(201)
+    cashierId = created.body.id ?? created.body.user?.id
+
+    const login = await request(app)
+      .post(`${BASE}/auth/login`)
+      .send({ username, password: CASHIER_PASSWORD, deviceId: 'cashier-rbac-device' })
+    expect(login.status).toBe(200)
+    cashierToken = login.body.accessToken
+    cashierBranchId = login.body.user?.branchId ?? admin.branchId ?? null
+  })
+
+  it('كاشير: يُرفض القيد المحاسبي وتُقبل فاتورة البيع في الدفعة نفسها', async () => {
+    const invoicesBefore = await prisma.saleInvoice.count({ where: { companyId } })
+
+    const res = await request(app)
+      .post(`${BASE}/sync/push`)
+      .set({ Authorization: `Bearer ${cashierToken}` })
+      .send({
+        deviceId: 'cashier-rbac-device',
+        changes: [
+          {
+            clientOpId: `rbac-journal:${Date.now()}`,
+            queueId: 101,
+            entity: 'journalEntry',
+            action: 'create',
+            userId: cashierId,
+            branchId: cashierBranchId,
+            data: {
+              entryDate: today(),
+              entryType: 'adjusting',
+              description: 'محاولة حقن قيد من كاشير',
+              lines: [
+                { accountId: customersAccountId, debit: 500, credit: 0 },
+                { accountId: revenueAccountId, debit: 0, credit: 500 },
+              ],
+            },
+          },
+          {
+            clientOpId: `rbac-sale:${Date.now()}`,
+            queueId: 102,
+            entity: 'saleInvoice',
+            action: 'create',
+            userId: cashierId,
+            branchId: cashierBranchId,
+            data: {
+              warehouseId,
+              partyId,
+              invoiceDate: today(),
+              paidAmount: 0,
+              items: [{ itemId, quantity: 1, unitPrice: 100 }],
+            },
+          },
+        ],
+      })
+
+    expect(res.status).toBe(200)
+    expect(res.body.recordsCount).toBe(1)
+    expect(res.body.errors).toHaveLength(1)
+    expect(res.body.errors[0]).toMatchObject({ entity: 'journalEntry', queueId: 101, code: 'FORBIDDEN' })
+
+    // القيد اليدوي لم يُنشأ (قد تُنشئ فاتورة البيع قيودها التلقائية، لذلك نتحقق بالوصف لا بالعدد)
+    const hijacked = await prisma.journalEntry.count({
+      where: { companyId, description: 'محاولة حقن قيد من كاشير' },
+    })
+    expect(hijacked).toBe(0)
+    expect(await prisma.saleInvoice.count({ where: { companyId } })).toBe(invoicesBefore + 1)
+  })
+
+  it('كاشير: لا يستطيع تعديل صنف (سعر البيع) عبر المزامنة', async () => {
+    const item = await prisma.item.findFirst({ where: { id: itemId } })
+    const originalPrice = item!.salePrice.toString()
+
+    const res = await request(app)
+      .post(`${BASE}/sync/push`)
+      .set({ Authorization: `Bearer ${cashierToken}` })
+      .send({
+        deviceId: 'cashier-rbac-device',
+        changes: [
+          {
+            clientOpId: `rbac-item:${Date.now()}`,
+            queueId: 103,
+            entity: 'item',
+            action: 'update',
+            id: itemId,
+            userId: cashierId,
+            branchId: cashierBranchId,
+            data: { salePrice: 1 },
+          },
+        ],
+      })
+
+    expect(res.body.recordsCount).toBe(0)
+    expect(res.body.errors).toHaveLength(1)
+    expect(res.body.errors[0].code).toBe('FORBIDDEN')
+
+    const after = await prisma.item.findFirst({ where: { id: itemId } })
+    expect(after!.salePrice.toString()).toBe(originalPrice)
+  })
+
+  it('المحاسب: القيد المحاسبي مسموح عبر المزامنة', async () => {
+    const username = `accountant_${Date.now()}`
+    const password = 'Accountant123!'
+
+    const created = await request(app)
+      .post(`${BASE}/settings/users`)
+      .set(auth())
+      .send({ username, password, fullName: 'محاسب اختبار RBAC', role: 'accountant', branchId: cashierBranchId })
+    expect(created.status).toBe(201)
+    const accountantId = created.body.id ?? created.body.user?.id
+
+    const login = await request(app)
+      .post(`${BASE}/auth/login`)
+      .send({ username, password, deviceId: 'accountant-rbac-device' })
+    expect(login.status).toBe(200)
+
+    const entriesBefore = await prisma.journalEntry.count({ where: { companyId } })
+
+    const res = await request(app)
+      .post(`${BASE}/sync/push`)
+      .set({ Authorization: `Bearer ${login.body.accessToken}` })
+      .send({
+        deviceId: 'accountant-rbac-device',
+        changes: [
+          {
+            clientOpId: `rbac-acc-journal:${Date.now()}`,
+            queueId: 104,
+            entity: 'journalEntry',
+            action: 'create',
+            userId: accountantId,
+            branchId: login.body.user?.branchId ?? cashierBranchId,
+            data: {
+              entryDate: today(),
+              entryType: 'adjusting',
+              description: 'قيد من محاسب عبر المزامنة',
+              lines: [
+                { accountId: customersAccountId, debit: 50, credit: 0 },
+                { accountId: revenueAccountId, debit: 0, credit: 50 },
+              ],
+            },
+          },
+        ],
+      })
+
+    expect(res.body.errors).toHaveLength(0)
+    expect(res.body.recordsCount).toBe(1)
+    expect(await prisma.journalEntry.count({ where: { companyId } })).toBe(entriesBefore + 1)
+  })
+
+  it('المحاولة غير المصرح بها تُسجَّل في AuditLog كحدث أمني', async () => {
+    const logs = await prisma.auditLog.findMany({
+      where: { companyId, eventType: 'UNAUTHORIZED_SYNC_ATTEMPT' },
+      orderBy: { id: 'desc' },
+    })
+
+    const journalAttempt = logs.find((l) => String(l.newValues).includes('journalEntry'))
+    expect(journalAttempt).toBeTruthy()
+    expect(journalAttempt!.userId).toBe(cashierId)
+    expect(journalAttempt!.action).toBe('SECURITY_EVENT')
+  })
+})

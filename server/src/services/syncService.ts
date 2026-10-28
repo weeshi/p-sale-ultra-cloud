@@ -10,6 +10,7 @@ import { transferService } from './transferService'
 import { inventoryService } from './inventoryService'
 import { sequenceService } from './sequenceService'
 import { notifyTransfer } from '../realtime'
+import { assertSyncAllowed, SyncForbiddenError } from './syncAuthorization'
 import { MOVEMENT_TYPES } from '../../../shared/constants'
 import { generateNumber } from '../../../shared/utils'
 
@@ -24,8 +25,12 @@ export interface SyncPushError {
   entity: string
   id: number | null
   queueId: number | null
+  code?: string
   message: string
 }
+
+// مهلة اعتبار الحجز المعلّق (PENDING) مهجوراً بعد انقطاع الخادم
+const CLAIM_TIMEOUT_MS = 5 * 60 * 1000
 
 // مزامنة البيانات بين الأجهزة المحلية (SQLite/IndexedDB) والسيرفر المركزي
 export class SyncService {
@@ -69,30 +74,14 @@ export class SyncService {
 
           // منع التكرار (Idempotency) بالحجز الذري المسبق (Claim-First):
           // قيد UNIQUE على client_op_id يضمن أن طلباً واحداً فقط يحجز المعرّف، حتى مع الطلبات المتوازية.
-          // الحجز لا يحتاج تمرير tx لخدمات الأعمال التي تملك ترانزاكشناتها الخاصة.
+          // الحجز بحالة PENDING ويُغلق بـ COMPLETED بعد النجاح — فتُغلق نافذة الانقطاع.
           const clientOpId =
             typeof change.clientOpId === 'string' && change.clientOpId.length > 0 ? change.clientOpId : null
-          let claimed = false
           if (clientOpId) {
-            try {
-              await prisma.syncOperation.create({
-                data: {
-                  companyId,
-                  deviceId,
-                  clientOpId,
-                  entity: String(change.entity ?? 'unknown'),
-                  action: String(change.action ?? 'unknown'),
-                  recordId: typeof change.id === 'number' ? change.id : null,
-                },
-              })
-              claimed = true
-            } catch (e: any) {
-              if (e?.code === 'P2002') {
-                // عملية سبق حجزها (منفذة أو قيد التنفيذ في طلب موازٍ) — تُتخطى بأمان
-                skippedCount++
-                continue
-              }
-              throw e
+            const claim = await this.claimOperation(companyId, deviceId, clientOpId, change)
+            if (claim === 'duplicate') {
+              skippedCount++
+              continue
             }
           }
 
@@ -100,17 +89,33 @@ export class SyncService {
             await this.applyChange(companyId, change, actor)
           } catch (applyErr) {
             // فشل منطقي: نحرر الحجز ليستطيع العميل إعادة المحاولة بعد تصحيح الخطأ
-            if (claimed && clientOpId) {
+            if (clientOpId) {
               await prisma.syncOperation.delete({ where: { clientOpId } }).catch(() => undefined)
             }
             throw applyErr
           }
           recordsCount++
+
+          if (clientOpId) {
+            // إغلاق الحجز: منع أي إعادة تنفيذ لاحقة. إن فشل التحديث يبقى الحجز PENDING
+            // (لا نحرره) لأن منع التكرار أهم من إعادة المحاولة.
+            await prisma.syncOperation
+              .update({ where: { clientOpId }, data: { status: 'COMPLETED' } })
+              .catch((e: any) => logger.error('Sync: تعذّر إغلاق حجز العملية', e))
+          }
         } catch (err: any) {
+          if (err instanceof SyncForbiddenError) {
+            await logSecurityEvent(
+              'UNAUTHORIZED_SYNC_ATTEMPT',
+              `عنصر «${err.entity}» (${err.action}) رُفض لدور «${actor.role}» — تجاوز صلاحيات عبر المزامنة`,
+              { companyId, userId: actorUserId }
+            )
+          }
           errors.push({
             entity: change.entity ?? 'unknown',
             id: typeof change.id === 'number' ? change.id : null,
             queueId,
+            code: typeof err?.code === 'string' ? err.code : undefined,
             message: err?.message ?? String(err),
           })
         }
@@ -147,6 +152,51 @@ export class SyncService {
   }
 
   /**
+   * الحجز الذري المسبق لمعرّف العملية (Claim-First) مع حالة PENDING/COMPLETED:
+   * - إدراج جديد = PENDING (منفّذ الآن من هذا الطلب)
+   * - P2002 + COMPLETED = عملية منفَّذة سابقاً → تخطٍّ
+   * - P2002 + PENDING حديث = طلب موازٍ قيد التنفيذ → تخطٍّ
+   * - P2002 + PENDING أقدم من 5 دقائق = أثر انقطاع → استيلاء ذري وإعادة تنفيذ
+   */
+  private async claimOperation(
+    companyId: number,
+    deviceId: string,
+    clientOpId: string,
+    change: any
+  ): Promise<'claimed' | 'duplicate'> {
+    const data = {
+      companyId,
+      deviceId,
+      clientOpId,
+      entity: String(change.entity ?? 'unknown'),
+      action: String(change.action ?? 'unknown'),
+      recordId: typeof change.id === 'number' ? change.id : null,
+    }
+
+    try {
+      await prisma.syncOperation.create({ data: { ...data, status: 'PENDING' } })
+      return 'claimed'
+    } catch (e: any) {
+      // P2002 متوقع في السباق — لا يُسجَّل كخطأ (مخفض الضجيج)
+      if (e?.code !== 'P2002') throw e
+    }
+
+    const existing = await prisma.syncOperation.findUnique({ where: { clientOpId } })
+    // سباق نادر: أُدرج ثم حُرر (فشل منطقي في الطلب الموازي) — نعتبرها مكتملة لتفادي تكرار غير محكوم
+    if (!existing || existing.status !== 'PENDING') return 'duplicate'
+
+    const cutoff = new Date(Date.now() - CLAIM_TIMEOUT_MS)
+    if (existing.createdAt && existing.createdAt.getTime() > cutoff.getTime()) return 'duplicate'
+
+    // استيلاء ذري مشروط: طلب واحد فقط ينجح (count = 1)
+    const takeover = await prisma.syncOperation.updateMany({
+      where: { clientOpId, status: 'PENDING', createdAt: { lt: cutoff } },
+      data: { ...data, status: 'PENDING', createdAt: new Date() },
+    })
+    return takeover.count === 1 ? 'claimed' : 'duplicate'
+  }
+
+  /**
    * فرع العملية: المستخدم المقيّد بفرع يُجبر عليه ويُتجاهل فرع الحمولة (البند 3).
    * السوبر أدمن أو المستخدم العالمي (بلا فرع) يستخدم فرع الحمولة إن وُجد.
    */
@@ -170,6 +220,10 @@ export class SyncService {
   private async applyChange(companyId: number, change: any, actor: SyncActor) {
     const { entity, action, id, data } = change
     const payload = (data ?? {}) as Record<string, any>
+
+    // تفويض المزامنة: نفس قواعد authorize() في REST — تُفرض قبل أي كتابة (deny by default)
+    assertSyncAllowed(actor, String(entity), String(action))
+
 
     // خريطة الجداول القابلة للمزامنة
     const entityMap: Record<string, string> = {

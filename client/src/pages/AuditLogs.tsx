@@ -30,6 +30,7 @@ const TABLE_OPTIONS: Array<{ key: string; label: string }> = [
 const SECURITY_EVENT_LABEL: Record<string, { label: string; cls: string }> = {
   IDENTITY_TAMPERING: { label: 'تزوير الهوية', cls: 'bg-red-50 text-red-700 ring-1 ring-red-200' },
   BRANCH_ACCESS_DENIED: { label: 'وصول فرع مرفوض', cls: 'bg-orange-50 text-orange-700 ring-1 ring-orange-200' },
+  UNAUTHORIZED_SYNC_ATTEMPT: { label: 'مزامنة غير مصرح بها', cls: 'bg-red-100 text-red-800 ring-1 ring-red-300' },
 }
 
 const ACTION_LABEL: Record<string, { label: string; cls: string }> = {
