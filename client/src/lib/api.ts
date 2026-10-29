@@ -6,8 +6,15 @@ const REFRESH_KEY = 'psale_refresh_token'
 
 // استخدام متغير بيئة أو القيمة الافتراضية للإنتاج
 // Vite يستبدل import.meta.env.VITE_API_BASE_URL عند البناء
-// عنوان الـ API: من متغيرات Vite إن وُجد، وإلا الخادم المحلي على 3005
-export const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || 'http://localhost:3005/api'
+// عنوان الـ API: من متغيرات Vite إن وُجد (يُستبدل نصياً وقت البناء).
+// الافتراضي **نسبي** (`/api`) لأن حزمة الإنتاج داخل Docker لا تحمل `.env`،
+// فتُبنى بـ `/api` ويعكسها nginx إلى الخادم. أما التطوير فيضبط العنوان المطلق
+// عبر `client/.env` (`VITE_API_BASE_URL=http://localhost:3005/api`).
+// (لو بقي الافتراضي مطلقاً، لاتصل متصفح المستخدم بـ localhost:3005 على جهازه.)
+// ملاحظة: يجب كتابة `import.meta.env.VITE_API_BASE_URL` حرفياً بلا `?.` أو `as any`
+// وإلا لا يستبدلها Vite نصياً وقت البناء فيسقط المتغير.
+const ENV_API_BASE_URL: string | undefined = import.meta.env.VITE_API_BASE_URL
+export const API_BASE_URL = ENV_API_BASE_URL && ENV_API_BASE_URL.length > 0 ? ENV_API_BASE_URL : '/api'
 
 /**
  * أصل الخادم (origin) المشتق من عنوان الـ API — يُستخدم للاتصال اللحظي (Socket.IO).
